@@ -17,7 +17,7 @@ async def test_login_returns_token_and_user(client, session):
     assert body["token_type"] == "bearer"
     assert body["user"]["username"] == "admin"
     assert body["user"]["role"] == "admin"
-    assert body["user"]["permissions"] == ["masterdata", "users"]
+    assert body["user"]["permissions"] == ["masterdata", "movements", "users"]
 
 
 async def test_login_trims_username(client, session):
@@ -66,7 +66,7 @@ async def test_me_returns_the_current_user(client, session):
     body = response.json()
     assert body["username"] == "jan"
     assert body["role"] == "operator"
-    assert body["permissions"] == []
+    assert body["permissions"] == ["movements"]
     assert body["must_change_password"] is True
 
 
