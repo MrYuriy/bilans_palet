@@ -24,6 +24,28 @@ async def ids(session) -> dict[str, str]:
     return {key: str(row.uuid) for key, row in rows.items()}
 
 
+@pytest.fixture
+async def stocked(client, admin_headers, ids):
+    """100 EUR pallets of each quality in the area, so there is something to move."""
+    response = await client.post(
+        "/movements",
+        headers=admin_headers,
+        json={
+            "type": "RECEIPT",
+            "area_uuid": ids["area"],
+            "lines": [
+                {
+                    "pallet_type_uuid": ids["eur"],
+                    "quality_uuid": ids[q],
+                    "quantity": 100,
+                }
+                for q in ("I", "II", "III")
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
 async def reclassify(client, headers, ids, lines):
     return await client.post(
         "/movements",
@@ -48,7 +70,9 @@ def lines_of(response):
 @pytest.mark.parametrize(
     ("source", "target"), [("I", "II"), ("I", "III"), ("II", "III")]
 )
-async def test_moves_to_a_worse_quality(client, admin_headers, ids, source, target):
+async def test_moves_to_a_worse_quality(
+    client, admin_headers, ids, stocked, source, target
+):
     response = await reclassify(
         client, admin_headers, ids, [move(ids, 50, source, target)]
     )
@@ -58,7 +82,7 @@ async def test_moves_to_a_worse_quality(client, admin_headers, ids, source, targ
     assert lines_of(response) == [(source, -50), (target, 50)]
 
 
-async def test_several_moves_in_one_document(client, admin_headers, ids):
+async def test_several_moves_in_one_document(client, admin_headers, ids, stocked):
     response = await reclassify(
         client,
         admin_headers,

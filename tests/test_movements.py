@@ -71,6 +71,18 @@ async def post(client, headers, **payload):
     return await client.post("/movements", headers=headers, json=payload)
 
 
+async def receive(client, headers, world, area_key, quantity):
+    """Put EUR / I pallets into an area, so they can be shipped or corrected."""
+    response = await post(
+        client,
+        headers,
+        type="RECEIPT",
+        area_uuid=getattr(world, area_key),
+        lines=[line(world, quantity)],
+    )
+    assert response.status_code == 200, response.text
+
+
 # ---------- the movement kinds ----------
 
 
@@ -114,6 +126,8 @@ async def test_lm_purchase_adds_pallets(client, admin_headers, world):
 
 
 async def test_shipment_is_stored_as_a_minus(client, admin_headers, world):
+    await receive(client, admin_headers, world, "area_b", 40)
+
     response = await post(
         client,
         admin_headers,
@@ -128,6 +142,8 @@ async def test_shipment_is_stored_as_a_minus(client, admin_headers, world):
 
 @pytest.mark.parametrize("quantity", [15, -15])
 async def test_correction_keeps_its_sign(client, admin_headers, world, quantity):
+    await receive(client, admin_headers, world, "area_a", 15)
+
     response = await post(
         client,
         admin_headers,
@@ -362,6 +378,7 @@ async def test_list_filters(client, admin_headers, world):
         operation_date=old,
         lines=[line(world, 1)],
     )
+    await receive(client, admin_headers, world, "area_b", 2)
     await post(
         client,
         admin_headers,

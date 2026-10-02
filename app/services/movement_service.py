@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
@@ -221,6 +222,33 @@ class MovementService:
 
         return result
 
+    async def _check_stock(self, area: Area, lines: list[MovementLine]) -> None:
+        """Refuse a document that would take any balance of the area below zero."""
+        change: dict[tuple[UUID, UUID], int] = defaultdict(int)
+        for line in lines:
+            change[line.pallet_type_uuid, line.quality_uuid] += line.quantity
+
+        decreasing = {key: delta for key, delta in change.items() if delta < 0}
+        if not decreasing:
+            return
+
+        # Checked one movement at a time per area, so two parallel shipments
+        # cannot both see the same stock.
+        await self.area_repo.lock(area.uuid)
+
+        for (pallet_type_uuid, quality_uuid), delta in decreasing.items():
+            available = await self.repo.balance(
+                area.uuid, pallet_type_uuid, quality_uuid
+            )
+            if available + delta < 0:
+                pallet_type = await self.pallet_type_repo.get_one(uuid=pallet_type_uuid)
+                quality = await self.quality_repo.get_one(uuid=quality_uuid)
+                raise BadRequestException(
+                    f"Niewystarczająca ilość {pallet_type.name} / {quality.name}"
+                    f" w obszarze „{area.name}”: dostępne {available},"
+                    f" potrzeba {-delta}"
+                )
+
     async def create(self, user: User, data: MovementCreate) -> MovementOut:
         area = await self._area(user, data.area_uuid)
         operation_date = self._operation_date(data.operation_date)
@@ -230,6 +258,7 @@ class MovementService:
             raise BadRequestException("Podaj powód korekty w komentarzu")
 
         lines = await self._lines(data.type, data.lines)
+        await self._check_stock(area, lines)
 
         movement = Movement(
             type=data.type,

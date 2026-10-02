@@ -54,3 +54,18 @@ class MovementRepository(BaseRepository[Movement]):
 
         rows = (await self.session.execute(query)).scalars().unique().all()
         return list(rows), (await self.session.execute(total)).scalar_one()
+
+    async def balance(
+        self, area_uuid: UUID, pallet_type_uuid: UUID, quality_uuid: UUID
+    ) -> int:
+        """Current balance of one pallet type and quality in an area."""
+        query = (
+            select(func.coalesce(func.sum(MovementLine.quantity), 0))
+            .join(Movement, MovementLine.movement_uuid == Movement.uuid)
+            .where(
+                Movement.area_uuid == area_uuid,
+                MovementLine.pallet_type_uuid == pallet_type_uuid,
+                MovementLine.quality_uuid == quality_uuid,
+            )
+        )
+        return (await self.session.execute(query)).scalar_one()
