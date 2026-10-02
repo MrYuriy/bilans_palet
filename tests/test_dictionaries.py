@@ -35,6 +35,15 @@ DICTIONARIES = [
         ),
         id="pallet-types",
     ),
+    pytest.param(
+        Dictionary(
+            url="/qualities",
+            not_found="Nie znaleziono jakości",
+            duplicate="Jakość o tej nazwie już istnieje",
+            extra=lambda n: {"sort_order": n},
+        ),
+        id="qualities",
+    ),
 ]
 
 
