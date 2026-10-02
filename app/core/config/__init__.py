@@ -12,4 +12,4 @@ class Settings(BaseConfig):
 
 settings = Settings()
 
-__all__ = ["Settings", "settings", "AppConfig", "AuthConfig", "DbConfig", "BaseConfig"]
+__all__ = ["AppConfig", "AuthConfig", "BaseConfig", "DbConfig", "Settings", "settings"]

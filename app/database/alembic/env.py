@@ -4,18 +4,15 @@ from logging.config import fileConfig
 
 from alembic import context
 from alembic.script import ScriptDirectory
-
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.core.config import settings
-from app.models.base import Base
-
 # IMPORTANT:
 # імпорт усіх моделей для autogenerate
 import app.models  # noqa
-
+from app.core.config import settings
+from app.models.base import Base
 
 config = context.config
 
@@ -48,11 +45,7 @@ def process_revision_directives(
 
     migration_script = directives[0]
 
-    head_revision = (
-        ScriptDirectory
-        .from_config(context.config)
-        .get_current_head()
-    )
+    head_revision = ScriptDirectory.from_config(context.config).get_current_head()
 
     if head_revision is None:
         new_revision = 1

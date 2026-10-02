@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 
 from app.core.exc.base import (
