@@ -60,3 +60,7 @@ def require_permission(module: str):
         return current_user
 
     return dependency
+
+
+# Changing dictionaries (areas, pallet types, qualities) — admin only.
+MasterdataAdmin = Annotated[User, Depends(require_permission("masterdata"))]

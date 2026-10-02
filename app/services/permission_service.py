@@ -14,7 +14,7 @@ class PermissionService:
     }
 
     # All modules, used by the frontend to gate the UI.
-    ALL_MODULES: ClassVar[tuple[str, ...]] = ("users",)
+    ALL_MODULES: ClassVar[tuple[str, ...]] = ("masterdata", "users")
 
     def has_access(self, role: str, module: str) -> bool:
         permissions = self.ROLE_PERMISSIONS.get(role, frozenset())

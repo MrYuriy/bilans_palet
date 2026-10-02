@@ -17,7 +17,7 @@ async def test_login_returns_token_and_user(client, session):
     assert body["token_type"] == "bearer"
     assert body["user"]["username"] == "admin"
     assert body["user"]["role"] == "admin"
-    assert body["user"]["permissions"] == ["users"]
+    assert body["user"]["permissions"] == ["masterdata", "users"]
 
 
 async def test_login_trims_username(client, session):

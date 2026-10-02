@@ -109,3 +109,10 @@ async def login(
     )
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest_asyncio.fixture
+async def admin_headers(client, session) -> dict[str, str]:
+    """Authorization header of a freshly created admin user."""
+    await make_user(session, "admin", role="admin")
+    return await login(client, "admin")

@@ -5,12 +5,6 @@ import pytest
 from tests.conftest import login, make_user
 
 
-@pytest.fixture
-async def admin_headers(client, session):
-    await make_user(session, "admin", role="admin")
-    return await login(client, "admin")
-
-
 async def test_admin_creates_and_lists_users(client, session, admin_headers):
     await make_user(session, "istniejacy", role="operator")
 
