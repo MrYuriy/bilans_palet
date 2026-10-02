@@ -82,6 +82,39 @@ async def seed_dictionaries(session: AsyncSession) -> list[str]:
     return filled
 
 
+async def seed_first_admin(
+    session: AsyncSession, admin_role: Role, username: str, password: str | None
+) -> tuple[str, str | None]:
+    """Create the first admin, but only while the system has no admin at all.
+
+    Checking by username instead would create a second full-access account on the
+    next start after the admin renamed theirs.
+    Returns (status, generated password or None); status is "exists",
+    "username-taken" or "created".
+    """
+    admins = await session.execute(
+        select(func.count()).select_from(User).where(User.role_uuid == admin_role.uuid)
+    )
+    if admins.scalar_one() > 0:
+        return "exists", None
+
+    taken = await session.execute(select(User).where(User.username == username))
+    if taken.scalar_one_or_none() is not None:
+        return "username-taken", None
+
+    generated = None if password else secrets.token_urlsafe(12)
+    session.add(
+        User(
+            username=username,
+            hashed_password=hash_password(password or generated),
+            role_uuid=admin_role.uuid,
+            is_active=True,
+        )
+    )
+    await session.flush()
+    return "created", generated
+
+
 async def seed() -> None:
     async with AsyncSessionLocal() as session:
         roles: dict[str, Role] = {}
@@ -98,30 +131,22 @@ async def seed() -> None:
 
             roles[name] = role
 
-        admin = (
-            await session.execute(select(User).where(User.username == ADMIN_USERNAME))
-        ).scalar_one_or_none()
-
-        if admin is None:
-            password = ADMIN_PASSWORD or secrets.token_urlsafe(12)
-            session.add(
-                User(
-                    username=ADMIN_USERNAME,
-                    hashed_password=hash_password(password),
-                    role_uuid=roles["admin"].uuid,
-                    is_active=True,
-                )
+        status, generated = await seed_first_admin(
+            session, roles["admin"], ADMIN_USERNAME, ADMIN_PASSWORD
+        )
+        if status == "exists":
+            print("An admin user already exists.")
+        elif status == "username-taken":
+            print(
+                f"No admin exists, but the username '{ADMIN_USERNAME}' is taken by a"
+                " non-admin user; set ADMIN_USERNAME to a free one."
             )
-            if ADMIN_PASSWORD:
-                print(f"Created admin user '{ADMIN_USERNAME}'.")
-            else:
-                print(
-                    f"Created admin user '{ADMIN_USERNAME}' with a generated password:"
-                )
-                print(f"    {password}")
-                print("Save it now - it will NOT be shown again.")
+        elif generated:
+            print(f"Created admin user '{ADMIN_USERNAME}' with a generated password:")
+            print(f"    {generated}")
+            print("Save it now - it will NOT be shown again.")
         else:
-            print(f"Admin user '{ADMIN_USERNAME}' already exists.")
+            print(f"Created admin user '{ADMIN_USERNAME}'.")
 
         filled = await seed_dictionaries(session)
         if filled:
