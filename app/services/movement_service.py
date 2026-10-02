@@ -11,6 +11,7 @@ from app.core.exc import (
 from app.core.timeutils import local_now
 from app.models.area import Area
 from app.models.movement import Movement, MovementLine, MovementType
+from app.models.quality import Quality
 from app.models.user import User
 from app.repositories.area_repo import AreaRepository
 from app.repositories.movement_repo import MovementRepository
@@ -140,21 +141,43 @@ class MovementService:
         if not lines:
             raise BadRequestException("Dodaj co najmniej jedną pozycję")
 
+        reclassification = movement_type == MovementType.RECLASSIFICATION
+
         pallet_types = {
             t.uuid: t
             for t in await self.pallet_type_repo.list_all_by_ids(
                 list({line.pallet_type_uuid for line in lines})
             )
         }
+        quality_uuids = {line.quality_uuid for line in lines} | {
+            line.to_quality_uuid for line in lines if line.to_quality_uuid
+        }
         qualities = {
             q.uuid: q
-            for q in await self.quality_repo.list_all_by_ids(
-                list({line.quality_uuid for line in lines})
-            )
+            for q in await self.quality_repo.list_all_by_ids(list(quality_uuids))
         }
 
-        result = []
-        for position, line in enumerate(lines, start=1):
+        def active_quality(quality_uuid: UUID) -> Quality:
+            quality = qualities.get(quality_uuid)
+            if quality is None:
+                raise BadRequestException("Nieznana jakość")
+            if not quality.is_active:
+                raise BadRequestException(f"Jakość „{quality.name}” jest nieaktywna")
+            return quality
+
+        result: list[MovementLine] = []
+
+        def add(pallet_type_uuid: UUID, quality_uuid: UUID, quantity: int) -> None:
+            result.append(
+                MovementLine(
+                    position=len(result) + 1,
+                    pallet_type_uuid=pallet_type_uuid,
+                    quality_uuid=quality_uuid,
+                    quantity=quantity,
+                )
+            )
+
+        for line in lines:
             pallet_type = pallet_types.get(line.pallet_type_uuid)
             if pallet_type is None:
                 raise BadRequestException("Nieznany typ palety")
@@ -163,29 +186,39 @@ class MovementService:
                     f"Typ palety „{pallet_type.name}” jest nieaktywny"
                 )
 
-            quality = qualities.get(line.quality_uuid)
-            if quality is None:
-                raise BadRequestException("Nieznana jakość")
-            if not quality.is_active:
-                raise BadRequestException(f"Jakość „{quality.name}” jest nieaktywna")
+            quality = active_quality(line.quality_uuid)
+
+            if line.to_quality_uuid is not None and not reclassification:
+                raise BadRequestException(
+                    "Jakość docelowa dotyczy tylko przeksięgowania"
+                )
 
             if movement_type == MovementType.CORRECTION:
                 if line.quantity == 0:
                     raise BadRequestException("Ilość korekty nie może być zerowa")
-                quantity = line.quantity
-            else:
-                if line.quantity <= 0:
-                    raise BadRequestException("Ilość musi być większa od zera")
-                quantity = SIGNS[movement_type] * line.quantity
+                add(pallet_type.uuid, quality.uuid, line.quantity)
+                continue
 
-            result.append(
-                MovementLine(
-                    position=position,
-                    pallet_type_uuid=pallet_type.uuid,
-                    quality_uuid=quality.uuid,
-                    quantity=quantity,
+            if line.quantity <= 0:
+                raise BadRequestException("Ilość musi być większa od zera")
+
+            if not reclassification:
+                add(
+                    pallet_type.uuid, quality.uuid, SIGNS[movement_type] * line.quantity
                 )
-            )
+                continue
+
+            # Re-classification: off the current quality, onto a worse one.
+            if line.to_quality_uuid is None:
+                raise BadRequestException("Podaj jakość docelową przeksięgowania")
+            target = active_quality(line.to_quality_uuid)
+            if target.sort_order <= quality.sort_order:
+                raise BadRequestException(
+                    "Przeksięgowanie możliwe tylko do gorszej jakości"
+                )
+            add(pallet_type.uuid, quality.uuid, -line.quantity)
+            add(pallet_type.uuid, target.uuid, line.quantity)
+
         return result
 
     async def create(self, user: User, data: MovementCreate) -> MovementOut:

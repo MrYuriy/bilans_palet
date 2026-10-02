@@ -474,4 +474,5 @@ async def test_movement_types_have_polish_labels(client, admin_headers):
         {"code": "LM_PURCHASE", "label": "Zakup LM"},
         {"code": "SHIPMENT", "label": "Wysyłka z magazynu"},
         {"code": "CORRECTION", "label": "Korekta"},
+        {"code": "RECLASSIFICATION", "label": "Przeksięgowanie kategorii"},
     ]

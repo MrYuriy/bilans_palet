@@ -12,6 +12,7 @@ MOVEMENT_LABELS: dict[MovementType, str] = {
     MovementType.LM_PURCHASE: "Zakup LM",
     MovementType.SHIPMENT: "Wysyłka z magazynu",
     MovementType.CORRECTION: "Korekta",
+    MovementType.RECLASSIFICATION: "Przeksięgowanie kategorii",
 }
 
 
@@ -25,6 +26,9 @@ class MovementLineIn(BaseModel):
     quality_uuid: UUID
     # Always positive, except a correction, where the sign says + or -.
     quantity: int
+    # Re-classification only: the worse quality the pallets move to
+    # (quality_uuid is then the quality they leave).
+    to_quality_uuid: UUID | None = None
 
 
 class MovementCreate(BaseModel):

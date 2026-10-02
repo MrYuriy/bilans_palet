@@ -21,6 +21,7 @@ class MovementType(StrEnum):
     LM_PURCHASE = "LM_PURCHASE"  # Zakup LM: a delivery by LM, counted like a receipt: +
     SHIPMENT = "SHIPMENT"  # Wysyłka z magazynu: -
     CORRECTION = "CORRECTION"  # Korekta: + or -
+    RECLASSIFICATION = "RECLASSIFICATION"  # Przeksięgowanie: - better, + worse
 
 
 class Movement(BaseModel, UUIDMixin, TimestampMixin):
