@@ -12,3 +12,7 @@ build/
 htmlcov/
 .DS_Store
 *.db
+
+# Local working notes (not committed for now)
+CLAUDE.md
+PLAN.md
