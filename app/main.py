@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.exc import register_exception_handlers
 from app.middleware.logging import log_requests
 from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
 
 logger = logging.getLogger(__name__)
 
@@ -43,3 +44,4 @@ async def health():
 
 
 app.include_router(auth_router)
+app.include_router(users_router)
