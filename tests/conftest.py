@@ -15,9 +15,13 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import StaticPool
 
+from app.core.security import hash_password
 from app.database.session import get_session
 from app.main import app
 from app.models.base import Base
+from app.models.role import Role
+from app.models.user import User
+from app.repositories.role_repo import RoleRepository
 
 # In-memory SQLite; StaticPool keeps one connection so every session sees the
 # same database within a test.
@@ -64,3 +68,44 @@ async def client(session) -> AsyncGenerator[AsyncClient, None]:
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+# ---------- auth helpers ----------
+
+PASSWORD = "Haslo123!"
+
+
+async def make_user(
+    session: AsyncSession,
+    username: str,
+    role: str = "operator",
+    password: str = PASSWORD,
+    **fields,
+) -> User:
+    """Create a user (and its role, if missing) directly in the database."""
+    role_obj = await RoleRepository(session).get_by_name(role)
+    if role_obj is None:
+        role_obj = Role(name=role)
+        session.add(role_obj)
+        await session.flush()
+
+    user = User(
+        username=username,
+        hashed_password=hash_password(password),
+        role_uuid=role_obj.uuid,
+        **fields,
+    )
+    session.add(user)
+    await session.commit()
+    return user
+
+
+async def login(
+    client: AsyncClient, username: str, password: str = PASSWORD
+) -> dict[str, str]:
+    """Log in through the API and return the Authorization header."""
+    response = await client.post(
+        "/auth/login", json={"username": username, "password": password}
+    )
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
