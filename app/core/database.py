@@ -1,0 +1,21 @@
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from app.core.config import settings
+
+engine = create_async_engine(
+    settings.db.url,
+    echo=False,
+    pool_pre_ping=True,
+    # Store now() defaults (created_at/updated_at) in local time, not UTC.
+    connect_args={"server_settings": {"timezone": settings.app.TIMEZONE}},
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
