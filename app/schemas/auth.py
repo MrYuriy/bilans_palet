@@ -1,6 +1,8 @@
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.area import AreaRef
 
 
 class LoginRequest(BaseModel):
@@ -18,8 +20,10 @@ class CurrentUser(BaseModel):
     username: str
     is_active: bool
     role: str
-    permissions: list[str] = []
+    permissions: list[str] = Field(default_factory=list)
     must_change_password: bool = False
+    # Active areas the user may work in: one → used automatically, several → pick.
+    areas: list[AreaRef] = Field(default_factory=list)
 
 
 class LoginResponse(BaseModel):

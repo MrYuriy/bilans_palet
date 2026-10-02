@@ -2,10 +2,13 @@ from uuid import UUID
 
 from app.core.exc import BadRequestException, ObjectNotFoundException
 from app.core.security import hash_password
+from app.models.area import Area
 from app.models.role import Role
 from app.models.user import User
+from app.repositories.area_repo import AreaRepository
 from app.repositories.role_repo import RoleRepository
 from app.repositories.user_repo import UserRepository
+from app.schemas.area import AreaRef
 from app.schemas.user import RoleOut, UserOut
 
 
@@ -16,6 +19,9 @@ def _user_out(user: User, role_name: str) -> UserOut:
         role=role_name,
         is_active=user.is_active,
         must_change_password=user.must_change_password,
+        areas=[
+            AreaRef.model_validate(a) for a in sorted(user.areas, key=lambda a: a.name)
+        ],
     )
 
 
@@ -23,12 +29,20 @@ class UserService:
     def __init__(self, session):
         self.repo = UserRepository(session)
         self.role_repo = RoleRepository(session)
+        self.area_repo = AreaRepository(session)
 
     async def _role(self, role_name: str) -> Role:
         role = await self.role_repo.get_by_name(role_name)
         if role is None:
             raise BadRequestException(f"Rola '{role_name}' nie istnieje")
         return role
+
+    async def _areas(self, area_uuids: list[UUID]) -> list[Area]:
+        wanted = set(area_uuids)
+        areas = await self.area_repo.list_all_by_ids(list(wanted))
+        if len(areas) != len(wanted):
+            raise BadRequestException("Nieznany obszar")
+        return list(areas)
 
     async def list_users(self) -> list[UserOut]:
         users = await self.repo.get_all_with_roles()
@@ -44,6 +58,7 @@ class UserService:
         password: str,
         role_name: str,
         must_change_password: bool = False,
+        area_uuids: list[UUID] | None = None,
     ) -> UserOut:
         username = username.strip()
         if not username or not password:
@@ -61,6 +76,7 @@ class UserService:
                 "role_uuid": role.uuid,
                 "is_active": True,
                 "must_change_password": must_change_password,
+                "areas": await self._areas(area_uuids or []),
             }
         )
         return _user_out(user, role.name)
@@ -73,6 +89,7 @@ class UserService:
         role_name: str | None = None,
         must_change_password: bool | None = None,
         is_active: bool | None = None,
+        area_uuids: list[UUID] | None = None,
     ) -> UserOut:
         user = await self.repo.get_with_role(user_uuid)
         if user is None:
@@ -103,6 +120,9 @@ class UserService:
 
         if is_active is not None:
             update["is_active"] = is_active
+
+        if area_uuids is not None:
+            update["areas"] = await self._areas(area_uuids)
 
         if update:
             user = await self.repo.update_one(user_uuid, update)

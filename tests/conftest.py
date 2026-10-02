@@ -8,6 +8,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -32,6 +33,16 @@ test_engine = create_async_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+@event.listens_for(test_engine.sync_engine, "connect")
+def _enforce_foreign_keys(dbapi_connection, _record):
+    # SQLite ignores foreign keys (and ON DELETE CASCADE) unless asked; Postgres
+    # always enforces them, so the tests must too.
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 
 TestSessionLocal = async_sessionmaker(
     bind=test_engine,
@@ -58,8 +69,11 @@ async def session(setup_database) -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture
 async def client(session) -> AsyncGenerator[AsyncClient, None]:
+    # A fresh session per request, as in production: nothing cached by one request
+    # (or by the test's own `session`) leaks into the next one.
     async def override_get_session():
-        yield session
+        async with TestSessionLocal() as request_session:
+            yield request_session
 
     app.dependency_overrides[get_session] = override_get_session
     async with AsyncClient(

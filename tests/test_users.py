@@ -103,6 +103,7 @@ async def test_admin_updates_a_user(client, session, admin_headers):
         "role": "viewer",
         "is_active": False,
         "must_change_password": True,
+        "areas": [],
     }
 
 

@@ -5,6 +5,7 @@ from app.core.jwt import create_access_token
 from app.core.security import hash_password, needs_rehash, verify_password
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
+from app.schemas.area import AreaRef
 from app.schemas.auth import CurrentUser, LoginResponse
 from app.services.permission_service import PermissionService
 
@@ -26,6 +27,11 @@ class AuthService:
             role=user.role.name,
             permissions=self.permissions.allowed_modules(user.role.name),
             must_change_password=user.must_change_password,
+            areas=[
+                AreaRef.model_validate(a)
+                for a in sorted(user.areas, key=lambda a: a.name)
+                if a.is_active
+            ],
         )
 
     async def login(self, username: str, password: str) -> LoginResponse | None:

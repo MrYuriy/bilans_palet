@@ -14,6 +14,15 @@ class AreaUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class AreaRef(BaseModel):
+    """An area as shown next to a user."""
+
+    uuid: UUID
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class AreaOut(BaseModel):
     uuid: UUID
     name: str

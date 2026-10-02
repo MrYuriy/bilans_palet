@@ -29,7 +29,11 @@ async def list_roles(session: SessionDep, _: UsersAdmin):
 @router.post("/users", response_model=UserOut)
 async def create_user(payload: UserCreate, session: SessionDep, _: UsersAdmin):
     user = await UserService(session).create_user(
-        payload.username, payload.password, payload.role, payload.must_change_password
+        payload.username,
+        payload.password,
+        payload.role,
+        payload.must_change_password,
+        payload.areas,
     )
     await session.commit()
     return user
@@ -52,6 +56,7 @@ async def update_user(
         payload.role,
         payload.must_change_password,
         payload.is_active,
+        payload.areas,
     )
     await session.commit()
     return user
