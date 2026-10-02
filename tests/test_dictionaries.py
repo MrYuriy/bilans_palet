@@ -27,6 +27,14 @@ DICTIONARIES = [
         ),
         id="areas",
     ),
+    pytest.param(
+        Dictionary(
+            url="/pallet-types",
+            not_found="Nie znaleziono typu palety",
+            duplicate="Typ palety o tej nazwie już istnieje",
+        ),
+        id="pallet-types",
+    ),
 ]
 
 
