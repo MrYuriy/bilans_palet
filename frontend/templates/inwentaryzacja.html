@@ -1,0 +1,46 @@
+{% extends "app.html" %}
+
+{% block title %}Inwentaryzacja — Bilans Palet EUR{% endblock %}
+{% block page %}inwentaryzacja{% endblock %}
+{% block heading %}Inwentaryzacja{% endblock %}
+{% block crumb %}<span id="day"></span>{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="pad row" style="align-items:flex-end">
+        <div class="fld" id="area-field">
+            <label for="area">Obszar</label>
+            <select id="area"></select>
+        </div>
+        <div class="mut hidden" id="area-fixed"></div>
+        <span class="sp"></span>
+        <span class="mut">Puste pole = pozycja nieliczona (stan bez zmian)</span>
+    </div>
+</div>
+
+<form class="card" id="count-form" novalidate>
+    <div class="hd"><h2>Arkusz spisu</h2><span class="sub" id="sheet-sub"></span></div>
+    <div class="scroll"><table id="sheet"></table></div>
+    <div class="pad grid2">
+        <div class="fld">
+            <label for="document">Nr dokumentu</label>
+            <input id="document" maxlength="100" placeholder="opcjonalnie">
+        </div>
+        <div class="fld">
+            <label for="comment">Komentarz</label>
+            <textarea id="comment" rows="2" placeholder="opcjonalnie"></textarea>
+        </div>
+    </div>
+    <div class="pad row" style="padding-top:0">
+        <button class="pri" type="submit" id="save">Zatwierdź spis</button>
+        <span class="msg" id="msg"></span>
+    </div>
+</form>
+
+<div class="card">
+    <div class="hd"><h2>Ostatnie spisy</h2></div>
+    <div class="scroll"><table id="history"></table></div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}<script src="/static/js/inwentaryzacja.js?v={{ asset_version }}"></script>{% endblock %}
