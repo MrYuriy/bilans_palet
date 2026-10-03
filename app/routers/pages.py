@@ -37,3 +37,8 @@ async def password_page(request: Request):
 @router.get("/app/pulpit")
 async def dashboard_page(request: Request):
     return templates.TemplateResponse(request, "pulpit.html")
+
+
+@router.get("/app/ruchy")
+async def movements_page(request: Request):
+    return templates.TemplateResponse(request, "ruchy.html")
