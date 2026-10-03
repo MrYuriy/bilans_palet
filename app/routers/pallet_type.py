@@ -25,26 +25,31 @@ async def get_pallet_type(type_uuid: UUID, session: SessionDep, _: CurrentUserDe
 
 @router.post("", response_model=PalletTypeOut)
 async def create_pallet_type(
-    payload: PalletTypeCreate, session: SessionDep, _: MasterdataAdmin
+    payload: PalletTypeCreate, session: SessionDep, admin: MasterdataAdmin
 ):
-    row = await PalletTypeService(session).create(payload.model_dump())
+    row = await PalletTypeService(session).create(admin, payload.model_dump())
     await session.commit()
     return row
 
 
 @router.put("/{type_uuid}", response_model=PalletTypeOut)
 async def update_pallet_type(
-    type_uuid: UUID, payload: PalletTypeUpdate, session: SessionDep, _: MasterdataAdmin
+    type_uuid: UUID,
+    payload: PalletTypeUpdate,
+    session: SessionDep,
+    admin: MasterdataAdmin,
 ):
     row = await PalletTypeService(session).update(
-        type_uuid, payload.model_dump(exclude_unset=True)
+        admin, type_uuid, payload.model_dump(exclude_unset=True)
     )
     await session.commit()
     return row
 
 
 @router.delete("/{type_uuid}", response_model=ActionResult)
-async def delete_pallet_type(type_uuid: UUID, session: SessionDep, _: MasterdataAdmin):
-    await PalletTypeService(session).delete(type_uuid)
+async def delete_pallet_type(
+    type_uuid: UUID, session: SessionDep, admin: MasterdataAdmin
+):
+    await PalletTypeService(session).delete(admin, type_uuid)
     await session.commit()
     return ActionResult()

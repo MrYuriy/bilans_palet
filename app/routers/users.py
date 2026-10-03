@@ -27,8 +27,9 @@ async def list_roles(session: SessionDep, _: UsersAdmin):
 
 
 @router.post("/users", response_model=UserOut)
-async def create_user(payload: UserCreate, session: SessionDep, _: UsersAdmin):
+async def create_user(payload: UserCreate, session: SessionDep, admin: UsersAdmin):
     user = await UserService(session).create_user(
+        admin,
         payload.username,
         payload.password,
         payload.role,
@@ -50,6 +51,7 @@ async def update_user(
         raise ForbiddenException("Nie możesz dezaktywować własnego konta")
 
     user = await UserService(session).update_user(
+        current_user,
         user_uuid,
         payload.username,
         payload.password,
@@ -67,6 +69,6 @@ async def delete_user(user_uuid: UUID, session: SessionDep, current_user: UsersA
     if user_uuid == current_user.uuid:
         raise ForbiddenException("Nie możesz usunąć własnego konta")
 
-    await UserService(session).delete_user(user_uuid)
+    await UserService(session).delete_user(current_user, user_uuid)
     await session.commit()
     return ActionResult()

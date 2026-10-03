@@ -9,7 +9,15 @@ from app.core.exc import (
     ObjectAlreadyExistsException,
     ObjectNotFoundException,
 )
+from app.models.user import User
 from app.repositories.base import BaseRepository
+from app.services.audit_service import AuditService
+
+_NOT_AUDITED = {"uuid", "created_at", "updated_at"}
+
+
+def _snapshot(row) -> dict[str, Any]:
+    return row.to_dict(exclude=_NOT_AUDITED)
 
 
 class DictionaryService[ModelType]:
@@ -25,9 +33,12 @@ class DictionaryService[ModelType]:
     in_use_message: ClassVar[str]
     # The movement column that points at this dictionary.
     used_by: ClassVar[InstrumentedAttribute]
+    # Entity code in the audit log.
+    entity: ClassVar[str]
 
     def __init__(self, repo: BaseRepository[ModelType]):
         self.repo = repo
+        self.audit = AuditService(repo.session)
 
     def _order_by(self) -> list:
         return [self.repo.model.name]
@@ -57,21 +68,32 @@ class DictionaryService[ModelType]:
         if await self.repo.get_one(name=name):
             raise ObjectAlreadyExistsException(self.duplicate_message)
 
-    async def create(self, data: dict[str, Any]) -> ModelType:
+    async def create(self, actor: User, data: dict[str, Any]) -> ModelType:
         await self._check_name(data, None)
         await self._validate(data, None)
-        return await self.repo.create_one(data)
+        row = await self.repo.create_one(data)
+        await self.audit.log(
+            actor, "create", self.entity, row.uuid, row.name, new_data=_snapshot(row)
+        )
+        return row
 
-    async def update(self, row_uuid: UUID, data: dict[str, Any]) -> ModelType:
+    async def update(
+        self, actor: User, row_uuid: UUID, data: dict[str, Any]
+    ) -> ModelType:
         current = await self.get(row_uuid)
         await self._check_name(data, current)
         await self._validate(data, current)
         if not data:
             return current
-        return await self.repo.update_one(row_uuid, data)
+        before = _snapshot(current)
+        row = await self.repo.update_one(row_uuid, data)
+        await self.audit.log_update(
+            actor, self.entity, row.uuid, row.name, before, _snapshot(row)
+        )
+        return row
 
-    async def delete(self, row_uuid: UUID) -> None:
-        await self.get(row_uuid)
+    async def delete(self, actor: User, row_uuid: UUID) -> None:
+        row = await self.get(row_uuid)
         # Read through the class: a column attribute is a descriptor, and
         # self.used_by would try to read it from this (unmapped) service.
         used_by = type(self).used_by
@@ -80,4 +102,7 @@ class DictionaryService[ModelType]:
         )
         if in_use.scalar_one():
             raise ObjectAlreadyExistsException(self.in_use_message)
+        await self.audit.log(
+            actor, "delete", self.entity, row.uuid, row.name, old_data=_snapshot(row)
+        )
         await self.repo.delete_one(row_uuid)

@@ -25,26 +25,31 @@ async def get_quality(quality_uuid: UUID, session: SessionDep, _: CurrentUserDep
 
 @router.post("", response_model=QualityOut)
 async def create_quality(
-    payload: QualityCreate, session: SessionDep, _: MasterdataAdmin
+    payload: QualityCreate, session: SessionDep, admin: MasterdataAdmin
 ):
-    row = await QualityService(session).create(payload.model_dump())
+    row = await QualityService(session).create(admin, payload.model_dump())
     await session.commit()
     return row
 
 
 @router.put("/{quality_uuid}", response_model=QualityOut)
 async def update_quality(
-    quality_uuid: UUID, payload: QualityUpdate, session: SessionDep, _: MasterdataAdmin
+    quality_uuid: UUID,
+    payload: QualityUpdate,
+    session: SessionDep,
+    admin: MasterdataAdmin,
 ):
     row = await QualityService(session).update(
-        quality_uuid, payload.model_dump(exclude_unset=True)
+        admin, quality_uuid, payload.model_dump(exclude_unset=True)
     )
     await session.commit()
     return row
 
 
 @router.delete("/{quality_uuid}", response_model=ActionResult)
-async def delete_quality(quality_uuid: UUID, session: SessionDep, _: MasterdataAdmin):
-    await QualityService(session).delete(quality_uuid)
+async def delete_quality(
+    quality_uuid: UUID, session: SessionDep, admin: MasterdataAdmin
+):
+    await QualityService(session).delete(admin, quality_uuid)
     await session.commit()
     return ActionResult()

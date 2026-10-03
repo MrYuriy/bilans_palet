@@ -17,6 +17,21 @@ from app.repositories.role_repo import RoleRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.area import AreaRef
 from app.schemas.user import RoleOut, UserOut
+from app.services.audit_service import AuditService
+
+
+def _audit_view(out: UserOut, password_changed: bool = False) -> dict:
+    """What the audit log keeps about a user; never the password hash."""
+    view = {
+        "username": out.username,
+        "role": out.role,
+        "is_active": out.is_active,
+        "must_change_password": out.must_change_password,
+        "areas": [a.name for a in out.areas],
+    }
+    if password_changed:
+        view["password_changed"] = True
+    return view
 
 
 def _user_out(user: User, role_name: str) -> UserOut:
@@ -37,6 +52,7 @@ class UserService:
         self.repo = UserRepository(session)
         self.role_repo = RoleRepository(session)
         self.area_repo = AreaRepository(session)
+        self.audit = AuditService(session)
 
     async def _role(self, role_name: str) -> Role:
         role = await self.role_repo.get_by_name(role_name)
@@ -61,6 +77,7 @@ class UserService:
 
     async def create_user(
         self,
+        actor: User,
         username: str,
         password: str,
         role_name: str,
@@ -86,10 +103,15 @@ class UserService:
                 "areas": await self._areas(area_uuids or []),
             }
         )
-        return _user_out(user, role.name)
+        out = _user_out(user, role.name)
+        await self.audit.log(
+            actor, "create", "user", user.uuid, out.username, new_data=_audit_view(out)
+        )
+        return out
 
     async def update_user(
         self,
+        actor: User,
         user_uuid: UUID,
         username: str | None = None,
         password: str | None = None,
@@ -102,6 +124,7 @@ class UserService:
         if user is None:
             raise ObjectNotFoundException("Nie znaleziono użytkownika")
 
+        before = _audit_view(_user_out(user, user.role.name))
         update: dict = {}
         role_name_out = user.role.name
 
@@ -134,10 +157,16 @@ class UserService:
         if update:
             user = await self.repo.update_one(user_uuid, update)
 
-        return _user_out(user, role_name_out)
+        out = _user_out(user, role_name_out)
+        after = _audit_view(out, password_changed="hashed_password" in update)
+        await self.audit.log_update(
+            actor, "user", user.uuid, out.username, before, after
+        )
+        return out
 
-    async def delete_user(self, user_uuid: UUID) -> None:
-        if await self.repo.get_one(uuid=user_uuid) is None:
+    async def delete_user(self, actor: User, user_uuid: UUID) -> None:
+        user = await self.repo.get_with_role(user_uuid)
+        if user is None:
             raise ObjectNotFoundException("Nie znaleziono użytkownika")
         has_movements = await self.repo.session.execute(
             select(exists().where(Movement.user_uuid == user_uuid))
@@ -146,4 +175,12 @@ class UserService:
             raise ObjectAlreadyExistsException(
                 "Użytkownik ma zarejestrowane ruchy. Możesz go dezaktywować."
             )
+        await self.audit.log(
+            actor,
+            "delete",
+            "user",
+            user.uuid,
+            user.username,
+            old_data=_audit_view(_user_out(user, user.role.name)),
+        )
         await self.repo.delete_one(user_uuid)

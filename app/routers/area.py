@@ -24,25 +24,25 @@ async def get_area(area_uuid: UUID, session: SessionDep, _: CurrentUserDep):
 
 
 @router.post("", response_model=AreaOut)
-async def create_area(payload: AreaCreate, session: SessionDep, _: MasterdataAdmin):
-    row = await AreaService(session).create(payload.model_dump())
+async def create_area(payload: AreaCreate, session: SessionDep, admin: MasterdataAdmin):
+    row = await AreaService(session).create(admin, payload.model_dump())
     await session.commit()
     return row
 
 
 @router.put("/{area_uuid}", response_model=AreaOut)
 async def update_area(
-    area_uuid: UUID, payload: AreaUpdate, session: SessionDep, _: MasterdataAdmin
+    area_uuid: UUID, payload: AreaUpdate, session: SessionDep, admin: MasterdataAdmin
 ):
     row = await AreaService(session).update(
-        area_uuid, payload.model_dump(exclude_unset=True)
+        admin, area_uuid, payload.model_dump(exclude_unset=True)
     )
     await session.commit()
     return row
 
 
 @router.delete("/{area_uuid}", response_model=ActionResult)
-async def delete_area(area_uuid: UUID, session: SessionDep, _: MasterdataAdmin):
-    await AreaService(session).delete(area_uuid)
+async def delete_area(area_uuid: UUID, session: SessionDep, admin: MasterdataAdmin):
+    await AreaService(session).delete(admin, area_uuid)
     await session.commit()
     return ActionResult()

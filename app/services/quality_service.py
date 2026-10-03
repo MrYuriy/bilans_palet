@@ -12,6 +12,7 @@ class QualityService(DictionaryService[Quality]):
     duplicate_message = "Jakość o tej nazwie już istnieje"
     in_use_message = "Jakość występuje w ruchach. Możesz ją dezaktywować."
     used_by = MovementLine.quality_uuid
+    entity = "quality"
 
     def __init__(self, session):
         super().__init__(QualityRepository(session))

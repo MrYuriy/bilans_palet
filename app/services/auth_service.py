@@ -7,6 +7,7 @@ from app.models.user import User
 from app.repositories.user_repo import UserRepository
 from app.schemas.area import AreaRef
 from app.schemas.auth import CurrentUser, LoginResponse
+from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
 
 # Verified against when the username does not exist, so a login attempt takes
@@ -18,6 +19,7 @@ class AuthService:
     def __init__(self, session: AsyncSession):
         self.repo = UserRepository(session)
         self.permissions = PermissionService()
+        self.audit = AuditService(session)
 
     def current_user(self, user: User) -> CurrentUser:
         return CurrentUser(
@@ -63,10 +65,19 @@ class AuthService:
         if not new_password:
             raise BadRequestException("Nowe hasło jest wymagane")
 
+        before = {"must_change_password": user.must_change_password}
         await self.repo.update_one(
             user.uuid,
             {
                 "hashed_password": hash_password(new_password),
                 "must_change_password": False,
             },
+        )
+        await self.audit.log_update(
+            user,
+            "user",
+            user.uuid,
+            user.username,
+            before,
+            {"must_change_password": False, "password_changed": True},
         )

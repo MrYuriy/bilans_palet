@@ -14,7 +14,12 @@ class PermissionService:
     }
 
     # All modules, used by the frontend to gate the UI.
-    ALL_MODULES: ClassVar[tuple[str, ...]] = ("masterdata", "movements", "users")
+    ALL_MODULES: ClassVar[tuple[str, ...]] = (
+        "audit",
+        "masterdata",
+        "movements",
+        "users",
+    )
 
     # Everyone else enters movements only in their assigned areas ...
     ENTERS_IN_ANY_AREA: ClassVar[frozenset[str]] = frozenset({"admin"})
