@@ -13,6 +13,7 @@ MOVEMENT_LABELS: dict[MovementType, str] = {
     MovementType.SHIPMENT: "Wysyłka z magazynu",
     MovementType.CORRECTION: "Korekta",
     MovementType.RECLASSIFICATION: "Przeksięgowanie kategorii",
+    MovementType.INVENTORY: "Inwentaryzacja",
 }
 
 
@@ -58,6 +59,16 @@ class MovementLineOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InventoryLineOut(BaseModel):
+    """A row of a count sheet: the system balance, what was counted, the difference."""
+
+    pallet_type: NamedRef
+    quality: NamedRef
+    system_quantity: int
+    counted_quantity: int
+    difference: int
+
+
 class MovementOut(BaseModel):
     uuid: UUID
     type: MovementType
@@ -69,3 +80,28 @@ class MovementOut(BaseModel):
     comment: str | None
     created_at: datetime
     lines: list[MovementLineOut]
+    # Inventory only: the count sheet; None for other movements.
+    inventory_lines: list[InventoryLineOut] | None = None
+
+
+class InventoryLineIn(BaseModel):
+    pallet_type_uuid: UUID
+    quality_uuid: UUID
+    counted_quantity: int
+
+
+class InventoryCreate(BaseModel):
+    """A stock count of one area. Dated today; only the counted rows change."""
+
+    area_uuid: UUID | None = None
+    document_number: str | None = None
+    comment: str | None = None
+    lines: list[InventoryLineIn]
+
+
+class SheetRowOut(BaseModel):
+    """A row of an empty count sheet: what the system holds now."""
+
+    pallet_type: NamedRef
+    quality: NamedRef
+    system_quantity: int

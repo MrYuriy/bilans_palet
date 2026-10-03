@@ -22,6 +22,7 @@ class MovementType(StrEnum):
     SHIPMENT = "SHIPMENT"  # Wysyłka z magazynu: -
     CORRECTION = "CORRECTION"  # Korekta: + or -
     RECLASSIFICATION = "RECLASSIFICATION"  # Przeksięgowanie: - better, + worse
+    INVENTORY = "INVENTORY"  # Inwentaryzacja: counted - system, with the count sheet
 
 
 class Movement(BaseModel, UUIDMixin, TimestampMixin):
@@ -59,6 +60,13 @@ class Movement(BaseModel, UUIDMixin, TimestampMixin):
         back_populates="movement",
         cascade="all, delete-orphan",
         order_by="MovementLine.position",
+    )
+    # Inventory only: the count sheet behind the movement's lines.
+    inventory_lines = relationship(
+        "InventoryLine",
+        back_populates="movement",
+        cascade="all, delete-orphan",
+        order_by="InventoryLine.position",
     )
 
 

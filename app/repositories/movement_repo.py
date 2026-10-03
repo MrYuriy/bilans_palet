@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.models.inventory import InventoryLine
 from app.models.movement import Movement, MovementLine, MovementType
 from app.repositories.base import BaseRepository
 
@@ -12,6 +13,8 @@ _DETAILS = [
     joinedload(Movement.user),
     selectinload(Movement.lines).joinedload(MovementLine.pallet_type),
     selectinload(Movement.lines).joinedload(MovementLine.quality),
+    selectinload(Movement.inventory_lines).joinedload(InventoryLine.pallet_type),
+    selectinload(Movement.inventory_lines).joinedload(InventoryLine.quality),
 ]
 
 
@@ -69,3 +72,20 @@ class MovementRepository(BaseRepository[Movement]):
             )
         )
         return (await self.session.execute(query)).scalar_one()
+
+    async def balances(self, area_uuid: UUID) -> dict[tuple[UUID, UUID], int]:
+        """Current balance of an area per (pallet type, quality) that has any line."""
+        query = (
+            select(
+                MovementLine.pallet_type_uuid,
+                MovementLine.quality_uuid,
+                func.sum(MovementLine.quantity),
+            )
+            .join(Movement, MovementLine.movement_uuid == Movement.uuid)
+            .where(Movement.area_uuid == area_uuid)
+            .group_by(MovementLine.pallet_type_uuid, MovementLine.quality_uuid)
+        )
+        rows = (await self.session.execute(query)).all()
+        return {
+            (type_uuid, quality_uuid): total for type_uuid, quality_uuid, total in rows
+        }

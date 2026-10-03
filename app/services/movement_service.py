@@ -20,6 +20,7 @@ from app.repositories.pallet_type_repo import PalletTypeRepository
 from app.repositories.quality_repo import QualityRepository
 from app.schemas.movement import (
     MOVEMENT_LABELS,
+    InventoryLineOut,
     MovementCreate,
     MovementLineIn,
     MovementOut,
@@ -48,10 +49,24 @@ def movement_out(movement: Movement) -> MovementOut:
         comment=movement.comment,
         created_at=movement.created_at,
         lines=movement.lines,
+        inventory_lines=(
+            [
+                InventoryLineOut(
+                    pallet_type=row.pallet_type,
+                    quality=row.quality,
+                    system_quantity=row.system_quantity,
+                    counted_quantity=row.counted_quantity,
+                    difference=row.counted_quantity - row.system_quantity,
+                )
+                for row in movement.inventory_lines
+            ]
+            if movement.type == MovementType.INVENTORY
+            else None
+        ),
     )
 
 
-def _clean(text: str | None) -> str | None:
+def clean_text(text: str | None) -> str | None:
     return (text or "").strip() or None
 
 
@@ -108,7 +123,7 @@ class MovementService:
 
     # ---------- creating ----------
 
-    async def _area(self, user: User, area_uuid: UUID | None) -> Area:
+    async def resolve_area(self, user: User, area_uuid: UUID | None) -> Area:
         assigned = [a for a in user.areas if a.is_active]
 
         if area_uuid is None:
@@ -250,9 +265,12 @@ class MovementService:
                 )
 
     async def create(self, user: User, data: MovementCreate) -> MovementOut:
-        area = await self._area(user, data.area_uuid)
+        if data.type == MovementType.INVENTORY:
+            raise BadRequestException("Inwentaryzację wprowadza się arkuszem spisu")
+
+        area = await self.resolve_area(user, data.area_uuid)
         operation_date = self._operation_date(data.operation_date)
-        comment = _clean(data.comment)
+        comment = clean_text(data.comment)
 
         if data.type == MovementType.CORRECTION and comment is None:
             raise BadRequestException("Podaj powód korekty w komentarzu")
@@ -265,7 +283,7 @@ class MovementService:
             area_uuid=area.uuid,
             user_uuid=user.uuid,
             operation_date=operation_date,
-            document_number=_clean(data.document_number),
+            document_number=clean_text(data.document_number),
             comment=comment,
             lines=lines,
         )

@@ -31,8 +31,8 @@ class DictionaryService[ModelType]:
     not_found_message: ClassVar[str]
     duplicate_message: ClassVar[str]
     in_use_message: ClassVar[str]
-    # The movement column that points at this dictionary.
-    used_by: ClassVar[InstrumentedAttribute]
+    # Columns of movements / count sheets that point at this dictionary.
+    used_by: ClassVar[tuple[InstrumentedAttribute, ...]]
     # Entity code in the audit log.
     entity: ClassVar[str]
 
@@ -94,14 +94,12 @@ class DictionaryService[ModelType]:
 
     async def delete(self, actor: User, row_uuid: UUID) -> None:
         row = await self.get(row_uuid)
-        # Read through the class: a column attribute is a descriptor, and
-        # self.used_by would try to read it from this (unmapped) service.
-        used_by = type(self).used_by
-        in_use = await self.repo.session.execute(
-            select(exists().where(used_by == row_uuid))
-        )
-        if in_use.scalar_one():
-            raise ObjectAlreadyExistsException(self.in_use_message)
+        for column in self.used_by:
+            in_use = await self.repo.session.execute(
+                select(exists().where(column == row_uuid))
+            )
+            if in_use.scalar_one():
+                raise ObjectAlreadyExistsException(self.in_use_message)
         await self.audit.log(
             actor, "delete", self.entity, row.uuid, row.name, old_data=_snapshot(row)
         )

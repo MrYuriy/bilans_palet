@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.core.exc import ObjectAlreadyExistsException
+from app.models.inventory import InventoryLine
 from app.models.movement import MovementLine
 from app.models.quality import Quality
 from app.repositories.quality_repo import QualityRepository
@@ -11,7 +12,7 @@ class QualityService(DictionaryService[Quality]):
     not_found_message = "Nie znaleziono jakości"
     duplicate_message = "Jakość o tej nazwie już istnieje"
     in_use_message = "Jakość występuje w ruchach. Możesz ją dezaktywować."
-    used_by = MovementLine.quality_uuid
+    used_by = (MovementLine.quality_uuid, InventoryLine.quality_uuid)
     entity = "quality"
 
     def __init__(self, session):
