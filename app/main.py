@@ -1,10 +1,12 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 from app.core.exc import register_exception_handlers
 from app.middleware.logging import log_requests
 from app.routers.area import router as area_router
@@ -16,14 +18,24 @@ from app.routers.pallet_type import router as pallet_type_router
 from app.routers.quality import router as quality_router
 from app.routers.setting import router as setting_router
 from app.routers.users import router as users_router
+from app.services.day_close_service import day_close_loop
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    day_close = None
+    if settings.app.DAY_CLOSE_ENABLED:
+        day_close = asyncio.create_task(
+            day_close_loop(AsyncSessionLocal, settings.app.DAY_CLOSE_INTERVAL_SECONDS)
+        )
     logger.info("Application started")
     yield
+    if day_close is not None:
+        day_close.cancel()
+        with suppress(asyncio.CancelledError):
+            await day_close
     logger.info("Application stopped")
 
 

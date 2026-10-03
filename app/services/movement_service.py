@@ -26,6 +26,7 @@ from app.schemas.movement import (
     MovementTypeOut,
     UserRef,
 )
+from app.services.day_close_service import ensure_day_open
 from app.services.permission_service import PermissionService
 from app.services.settings_service import SettingsService
 
@@ -244,13 +245,9 @@ class MovementService:
             change[line.pallet_type_uuid, line.quality_uuid] += line.quantity
 
         decreasing = {key: delta for key, delta in change.items() if delta < 0}
-        if not decreasing:
-            return
 
-        # Checked one movement at a time per area, so two parallel shipments
+        # The caller holds the area lock, so two parallel shipments of one area
         # cannot both see the same stock.
-        await self.area_repo.lock(area.uuid)
-
         for (pallet_type_uuid, quality_uuid), delta in decreasing.items():
             available = await self.repo.balance(
                 area.uuid, pallet_type_uuid, quality_uuid
@@ -276,6 +273,11 @@ class MovementService:
             raise BadRequestException("Podaj powód korekty w komentarzu")
 
         lines = await self._lines(data.type, data.lines)
+
+        # From here on the area is locked: a day being closed waits for this
+        # movement, or this movement sees that its day was closed.
+        await self.area_repo.lock(area.uuid)
+        await ensure_day_open(self.session, operation_date)
         await self._check_stock(area, lines)
 
         movement = Movement(

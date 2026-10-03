@@ -1,6 +1,7 @@
 from app.models.area import Area
 from app.models.audit_log import AuditLog
 from app.models.base import Base
+from app.models.day_closure import DailyBalance, DayClosure
 from app.models.inventory import InventoryLine
 from app.models.movement import Movement, MovementLine, MovementType
 from app.models.pallet_type import PalletType
@@ -14,6 +15,8 @@ __all__ = [
     "Area",
     "AuditLog",
     "Base",
+    "DailyBalance",
+    "DayClosure",
     "InventoryLine",
     "Movement",
     "MovementLine",

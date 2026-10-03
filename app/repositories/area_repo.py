@@ -16,3 +16,10 @@ class AreaRepository(BaseRepository[Area]):
         await self.session.execute(
             select(Area.uuid).where(Area.uuid == area_uuid).with_for_update()
         )
+
+    async def lock_all(self) -> None:
+        """Hold every area row (in a fixed order, so it cannot deadlock with a
+        movement that holds one of them) while a day is being closed."""
+        await self.session.execute(
+            select(Area.uuid).order_by(Area.uuid).with_for_update()
+        )

@@ -1,9 +1,11 @@
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.timeutils import business_date, local_now
+from app.models.day_closure import DayClosure
 from app.models.setting import DEFAULT_DAY_CUTOFF, SystemSettings
 from app.models.user import User
 from app.services.audit_service import AuditService
@@ -31,9 +33,22 @@ class SettingsService:
     async def day_cutoff(self) -> time:
         return (await self.get()).day_cutoff
 
-    async def current_day(self) -> date:
-        """The warehouse day it is now."""
-        return business_date(local_now(), await self.day_cutoff())
+    async def last_closed_day(self) -> date | None:
+        return (
+            await self.session.execute(select(func.max(DayClosure.business_date)))
+        ).scalar_one()
+
+    async def current_day(self, now: datetime | None = None) -> date:
+        """The warehouse day it is now.
+
+        Never a closed day: moving the cut-off later could otherwise put "now"
+        back into a day that has already been closed.
+        """
+        day = business_date(now or local_now(), await self.day_cutoff())
+        last_closed = await self.last_closed_day()
+        if last_closed is not None and day <= last_closed:
+            return last_closed + timedelta(days=1)
+        return day
 
     async def update(self, actor: User, day_cutoff: time) -> SystemSettings:
         row = await self.session.get(SystemSettings, 1)

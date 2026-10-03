@@ -14,3 +14,6 @@ class AppConfig(BaseConfig):
     )
     # DB session timezone so now() defaults are stored in local wall-clock time.
     TIMEZONE: str = "Europe/Warsaw"
+    # Background task that closes ended warehouse days (keep one app process).
+    DAY_CLOSE_ENABLED: bool = True
+    DAY_CLOSE_INTERVAL_SECONDS: int = 60

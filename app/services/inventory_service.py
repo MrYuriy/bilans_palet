@@ -10,6 +10,7 @@ from app.models.quality import Quality
 from app.models.user import User
 from app.schemas.common import NamedRef
 from app.schemas.movement import InventoryCreate, MovementOut, SheetRowOut
+from app.services.day_close_service import ensure_day_open
 from app.services.movement_service import MovementService, clean_text, movement_out
 from app.services.settings_service import SettingsService
 
@@ -93,6 +94,8 @@ class InventoryService:
         # The system balance is read under the area lock, so no movement of this
         # area can slip in between reading it and recording the difference.
         await self.movements.area_repo.lock(area.uuid)
+        today = await SettingsService(self.session).current_day()
+        await ensure_day_open(self.session, today)
         balances = await self.movements.repo.balances(area.uuid)
 
         sheet: list[InventoryLine] = []
@@ -122,7 +125,7 @@ class InventoryService:
             type=MovementType.INVENTORY,
             area_uuid=area.uuid,
             user_uuid=user.uuid,
-            operation_date=await SettingsService(self.session).current_day(),
+            operation_date=today,
             document_number=clean_text(data.document_number),
             comment=clean_text(data.comment),
             lines=differences,
