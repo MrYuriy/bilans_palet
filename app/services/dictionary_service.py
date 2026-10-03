@@ -1,6 +1,9 @@
 from typing import Any, ClassVar
 from uuid import UUID
 
+from sqlalchemy import exists, select
+from sqlalchemy.orm import InstrumentedAttribute
+
 from app.core.exc import (
     BadRequestException,
     ObjectAlreadyExistsException,
@@ -13,11 +16,15 @@ class DictionaryService[ModelType]:
     """Shared CRUD for the admin-managed dictionaries (areas, pallet types, qualities).
 
     Every dictionary row has a unique ``name`` and an ``is_active`` flag.
-    Subclasses set the Polish messages and the list order.
+    Subclasses set the Polish messages, the list order and where movements
+    refer to the row (a row in use is deactivated, never deleted).
     """
 
     not_found_message: ClassVar[str]
     duplicate_message: ClassVar[str]
+    in_use_message: ClassVar[str]
+    # The movement column that points at this dictionary.
+    used_by: ClassVar[InstrumentedAttribute]
 
     def __init__(self, repo: BaseRepository[ModelType]):
         self.repo = repo
@@ -65,5 +72,12 @@ class DictionaryService[ModelType]:
 
     async def delete(self, row_uuid: UUID) -> None:
         await self.get(row_uuid)
-        # TODO(phase 4): refuse when the row is already used by movements.
+        # Read through the class: a column attribute is a descriptor, and
+        # self.used_by would try to read it from this (unmapped) service.
+        used_by = type(self).used_by
+        in_use = await self.repo.session.execute(
+            select(exists().where(used_by == row_uuid))
+        )
+        if in_use.scalar_one():
+            raise ObjectAlreadyExistsException(self.in_use_message)
         await self.repo.delete_one(row_uuid)

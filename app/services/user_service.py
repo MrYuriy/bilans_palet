@@ -1,8 +1,15 @@
 from uuid import UUID
 
-from app.core.exc import BadRequestException, ObjectNotFoundException
+from sqlalchemy import exists, select
+
+from app.core.exc import (
+    BadRequestException,
+    ObjectAlreadyExistsException,
+    ObjectNotFoundException,
+)
 from app.core.security import hash_password
 from app.models.area import Area
+from app.models.movement import Movement
 from app.models.role import Role
 from app.models.user import User
 from app.repositories.area_repo import AreaRepository
@@ -132,5 +139,11 @@ class UserService:
     async def delete_user(self, user_uuid: UUID) -> None:
         if await self.repo.get_one(uuid=user_uuid) is None:
             raise ObjectNotFoundException("Nie znaleziono użytkownika")
-        # TODO(phase 4): refuse when the user already has movements.
+        has_movements = await self.repo.session.execute(
+            select(exists().where(Movement.user_uuid == user_uuid))
+        )
+        if has_movements.scalar_one():
+            raise ObjectAlreadyExistsException(
+                "Użytkownik ma zarejestrowane ruchy. Możesz go dezaktywować."
+            )
         await self.repo.delete_one(user_uuid)
