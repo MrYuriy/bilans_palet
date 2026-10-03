@@ -1,0 +1,51 @@
+{% extends "app.html" %}
+
+{% block title %}Nowa operacja — Bilans Palet EUR{% endblock %}
+{% block page %}nowa-operacja{% endblock %}
+{% block heading %}Nowa operacja{% endblock %}
+{% block crumb %}<span id="day"></span>{% endblock %}
+
+{% block content %}
+<form class="col" id="movement-form" novalidate>
+    <div class="card">
+        <div class="hd"><h2>Obszar i typ operacji</h2></div>
+        <div class="pad col">
+            <div class="fld" id="area-field">
+                <label for="area">Obszar</label>
+                <select id="area"></select>
+            </div>
+            <div class="mut hidden" id="area-fixed"></div>
+            <div class="tabs" id="types"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="hd">
+            <h2 id="lines-title">Pozycje</h2>
+            <span class="sub" id="lines-hint"></span>
+            <span class="sp"></span>
+            <button type="button" class="sm" id="add-line">+ Dodaj pozycję</button>
+        </div>
+        <div class="scroll"><table id="lines"></table></div>
+    </div>
+
+    <div class="card">
+        <div class="pad grid2">
+            <div class="fld">
+                <label for="document">Nr dokumentu</label>
+                <input id="document" maxlength="100" placeholder="opcjonalnie">
+            </div>
+            <div class="fld">
+                <label for="comment" id="comment-label">Komentarz</label>
+                <textarea id="comment" rows="2" placeholder="opcjonalnie"></textarea>
+            </div>
+        </div>
+        <div class="pad row" style="padding-top:0">
+            <button class="pri" type="submit" id="save">Zatwierdź operację</button>
+            <span class="msg" id="msg"></span>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block page_scripts %}<script src="/static/js/nowa_operacja.js?v={{ asset_version }}"></script>{% endblock %}

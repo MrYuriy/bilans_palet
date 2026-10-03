@@ -248,7 +248,7 @@ tr.click:hover td { background: #fafbf9; }
 tr.sum td { font-weight: 600; background: #fafbf9; border-top: 1px solid var(--rule); }
 
 .num { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
-th.num { text-align: right; }
+th.num { text-align: right; font-family: var(--font); font-size: 9.5px; }
 .strong { font-weight: 600; color: var(--ink); }
 .mut { color: var(--muted); }
 .pos { color: var(--accent-ink); }
@@ -348,6 +348,7 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 .chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+a.chip { text-decoration: none; }
 
 .msg { font-size: 12px; min-height: 16px; }
 .msg.error { color: var(--err-ink); }

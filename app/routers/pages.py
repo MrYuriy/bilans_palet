@@ -42,3 +42,8 @@ async def dashboard_page(request: Request):
 @router.get("/app/ruchy")
 async def movements_page(request: Request):
     return templates.TemplateResponse(request, "ruchy.html")
+
+
+@router.get("/app/nowa-operacja")
+async def new_movement_page(request: Request):
+    return templates.TemplateResponse(request, "nowa_operacja.html")

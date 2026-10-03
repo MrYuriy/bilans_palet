@@ -9,6 +9,7 @@ PAGES = [
     ("/app/haslo", "Zmiana hasła"),
     ("/app/pulpit", "Pulpit"),
     ("/app/ruchy", "Rejestr operacji"),
+    ("/app/nowa-operacja", "Nowa operacja"),
 ]
 
 
