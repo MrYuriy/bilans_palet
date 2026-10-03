@@ -6,6 +6,7 @@ from app.models.movement import Movement, MovementLine, MovementType
 from app.models.pallet_type import PalletType
 from app.models.quality import Quality
 from app.models.role import Role
+from app.models.setting import SystemSettings
 from app.models.user import User
 from app.models.user_area import user_areas
 
@@ -20,6 +21,7 @@ __all__ = [
     "PalletType",
     "Quality",
     "Role",
+    "SystemSettings",
     "User",
     "user_areas",
 ]

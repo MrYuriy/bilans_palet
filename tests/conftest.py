@@ -17,10 +17,12 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password
+from app.core.timeutils import business_date, local_now
 from app.database.session import get_session
 from app.main import app
 from app.models.base import Base
 from app.models.role import Role
+from app.models.setting import DEFAULT_DAY_CUTOFF
 from app.models.user import User
 from app.repositories.role_repo import RoleRepository
 
@@ -130,3 +132,8 @@ async def admin_headers(client, session) -> dict[str, str]:
     """Authorization header of a freshly created admin user."""
     await make_user(session, "admin", role="admin")
     return await login(client, "admin")
+
+
+def warehouse_today():
+    """Today's warehouse day under the default cut-off (no settings row in tests)."""
+    return business_date(local_now(), DEFAULT_DAY_CUTOFF)

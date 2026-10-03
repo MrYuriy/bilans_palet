@@ -18,6 +18,7 @@ class PermissionService:
         "audit",
         "masterdata",
         "movements",
+        "settings",
         "users",
     )
 

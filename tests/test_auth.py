@@ -21,6 +21,7 @@ async def test_login_returns_token_and_user(client, session):
         "audit",
         "masterdata",
         "movements",
+        "settings",
         "users",
     ]
 

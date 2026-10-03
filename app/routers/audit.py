@@ -39,7 +39,7 @@ async def list_audit_log(
     response: Response,
     session: SessionDep,
     _: AuditReader,
-    entity: Literal["user", "area", "pallet_type", "quality"] | None = None,
+    entity: Literal["user", "area", "pallet_type", "quality", "settings"] | None = None,
     entity_uuid: UUID | None = None,
     user_uuid: UUID | None = None,
     date_from: date | None = None,

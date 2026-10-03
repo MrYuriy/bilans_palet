@@ -14,6 +14,7 @@ from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
 from app.routers.pallet_type import router as pallet_type_router
 from app.routers.quality import router as quality_router
+from app.routers.setting import router as setting_router
 from app.routers.users import router as users_router
 
 logger = logging.getLogger(__name__)
@@ -57,3 +58,4 @@ app.include_router(quality_router)
 app.include_router(movement_router)
 app.include_router(inventory_router)
 app.include_router(audit_router)
+app.include_router(setting_router)

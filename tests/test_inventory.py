@@ -5,12 +5,11 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import insert
 
-from app.core.timeutils import local_now
 from app.models.area import Area
 from app.models.pallet_type import PalletType
 from app.models.quality import Quality
 from app.models.user_area import user_areas
-from tests.conftest import login, make_user
+from tests.conftest import login, make_user, warehouse_today
 
 
 @pytest.fixture
@@ -93,7 +92,7 @@ async def test_a_shortage_is_written_as_a_minus(client, admin_headers, ids):
     assert response.status_code == 200, response.text
     body = response.json()
     assert (body["type"], body["type_label"]) == ("INVENTORY", "Inwentaryzacja")
-    assert body["operation_date"] == local_now().date().isoformat()
+    assert body["operation_date"] == warehouse_today().isoformat()
     assert body["comment"] == "spis kwartalny"
     assert sheet_of(response) == [("I", 100, 90, -10)]
     assert lines_of(response) == [("I", -10)]
@@ -219,7 +218,7 @@ async def test_a_count_cannot_be_dated(client, admin_headers, ids):
         client, admin_headers, ids, counted(ids, 1), operation_date="2020-01-01"
     )
 
-    assert response.json()["operation_date"] == local_now().date().isoformat()
+    assert response.json()["operation_date"] == warehouse_today().isoformat()
 
 
 async def test_not_through_the_movements_endpoint(client, admin_headers, ids):

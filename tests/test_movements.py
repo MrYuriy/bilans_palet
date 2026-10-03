@@ -7,12 +7,11 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import insert
 
-from app.core.timeutils import local_now
 from app.models.area import Area
 from app.models.pallet_type import PalletType
 from app.models.quality import Quality
 from app.models.user_area import user_areas
-from tests.conftest import login, make_user
+from tests.conftest import login, make_user, warehouse_today
 
 
 @dataclass
@@ -103,7 +102,7 @@ async def test_receipt_adds_pallets(client, admin_headers, world):
     assert body["type_label"] == "Przyjęcie na magazyn"
     assert body["area"]["name"] == "Przyjęcia 445"
     assert body["user"]["username"] == "admin"
-    assert body["operation_date"] == local_now().date().isoformat()
+    assert body["operation_date"] == warehouse_today().isoformat()
     assert body["document_number"] == "PZ/12"
     assert body["comment"] == "dostawa"
     assert [
@@ -246,7 +245,7 @@ async def test_unknown_type_is_rejected(client, admin_headers, world):
 
 
 async def test_operation_date_in_the_past_is_fine(client, admin_headers, world):
-    yesterday = (local_now().date() - timedelta(days=1)).isoformat()
+    yesterday = (warehouse_today() - timedelta(days=1)).isoformat()
 
     response = await post(
         client,
@@ -261,7 +260,7 @@ async def test_operation_date_in_the_past_is_fine(client, admin_headers, world):
 
 
 async def test_operation_date_in_the_future_is_rejected(client, admin_headers, world):
-    tomorrow = (local_now().date() + timedelta(days=1)).isoformat()
+    tomorrow = (warehouse_today() + timedelta(days=1)).isoformat()
 
     response = await post(
         client,
@@ -348,7 +347,7 @@ async def test_viewer_cannot_enter_movements(client, session, world):
 
 
 async def test_list_is_newest_first_with_a_total(client, admin_headers, world):
-    old = (local_now().date() - timedelta(days=3)).isoformat()
+    old = (warehouse_today() - timedelta(days=3)).isoformat()
     for operation_date, quantity in [(old, 1), (None, 2), (None, 3)]:
         await post(
             client,
@@ -369,7 +368,7 @@ async def test_list_is_newest_first_with_a_total(client, admin_headers, world):
 
 
 async def test_list_filters(client, admin_headers, world):
-    old = (local_now().date() - timedelta(days=3)).isoformat()
+    old = (warehouse_today() - timedelta(days=3)).isoformat()
     await post(
         client,
         admin_headers,

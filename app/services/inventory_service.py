@@ -3,7 +3,6 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exc import BadRequestException
-from app.core.timeutils import local_now
 from app.models.inventory import InventoryLine
 from app.models.movement import Movement, MovementLine, MovementType
 from app.models.pallet_type import PalletType
@@ -12,6 +11,7 @@ from app.models.user import User
 from app.schemas.common import NamedRef
 from app.schemas.movement import InventoryCreate, MovementOut, SheetRowOut
 from app.services.movement_service import MovementService, clean_text, movement_out
+from app.services.settings_service import SettingsService
 
 
 class InventoryService:
@@ -122,7 +122,7 @@ class InventoryService:
             type=MovementType.INVENTORY,
             area_uuid=area.uuid,
             user_uuid=user.uuid,
-            operation_date=local_now().date(),
+            operation_date=await SettingsService(self.session).current_day(),
             document_number=clean_text(data.document_number),
             comment=clean_text(data.comment),
             lines=differences,

@@ -17,6 +17,7 @@ ENTITY_LABELS = {
     "area": "Obszar",
     "pallet_type": "Typ palety",
     "quality": "Jakość",
+    "settings": "Ustawienia",
 }
 
 

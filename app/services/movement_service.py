@@ -9,7 +9,6 @@ from app.core.exc import (
     ForbiddenException,
     ObjectNotFoundException,
 )
-from app.core.timeutils import local_now
 from app.models.area import Area
 from app.models.movement import Movement, MovementLine, MovementType
 from app.models.quality import Quality
@@ -28,6 +27,7 @@ from app.schemas.movement import (
     UserRef,
 )
 from app.services.permission_service import PermissionService
+from app.services.settings_service import SettingsService
 
 # Movements entered as positive quantities, and the sign they get in the balance.
 SIGNS = {
@@ -142,9 +142,9 @@ class MovementService:
             raise ForbiddenException("Brak dostępu do obszaru")
         return area
 
-    @staticmethod
-    def _operation_date(value: date | None) -> date:
-        today = local_now().date()
+    async def _operation_date(self, value: date | None) -> date:
+        """The warehouse day of the movement; today's when left out."""
+        today = await SettingsService(self.session).current_day()
         if value is None:
             return today
         if value > today:
@@ -269,7 +269,7 @@ class MovementService:
             raise BadRequestException("Inwentaryzację wprowadza się arkuszem spisu")
 
         area = await self.resolve_area(user, data.area_uuid)
-        operation_date = self._operation_date(data.operation_date)
+        operation_date = await self._operation_date(data.operation_date)
         comment = clean_text(data.comment)
 
         if data.type == MovementType.CORRECTION and comment is None:
