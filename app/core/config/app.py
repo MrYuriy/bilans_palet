@@ -17,3 +17,4 @@ class AppConfig(BaseConfig):
     # Background task that closes ended warehouse days (keep one app process).
     DAY_CLOSE_ENABLED: bool = True
     DAY_CLOSE_INTERVAL_SECONDS: int = 60
+    LOG_LEVEL: str = "INFO"

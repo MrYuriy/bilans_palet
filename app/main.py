@@ -24,6 +24,12 @@ from app.routers.setting import router as setting_router
 from app.routers.users import router as users_router
 from app.services.day_close_service import day_close_loop
 
+# Without this the app's own INFO messages (requests, closed days) are dropped:
+# uvicorn configures only its own loggers.
+logging.basicConfig(
+    level=settings.app.LOG_LEVEL,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
