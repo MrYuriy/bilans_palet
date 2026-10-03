@@ -94,6 +94,23 @@ class BalanceRepository:
 
         return list(rows.values())
 
+    async def current(self) -> dict[Key, int]:
+        """What every area holds now, per pallet type and quality."""
+        key_columns = (
+            Movement.area_uuid,
+            MovementLine.pallet_type_uuid,
+            MovementLine.quality_uuid,
+        )
+        query = (
+            select(*key_columns, func.sum(MovementLine.quantity))
+            .join(Movement, MovementLine.movement_uuid == Movement.uuid)
+            .group_by(*key_columns)
+        )
+        return {
+            (area, pallet_type, quality): total
+            for area, pallet_type, quality, total in await self.session.execute(query)
+        }
+
     async def first_movement_day(self) -> date | None:
         return (
             await self.session.execute(select(func.min(Movement.operation_date)))

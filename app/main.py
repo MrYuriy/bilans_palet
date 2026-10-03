@@ -12,6 +12,7 @@ from app.middleware.logging import log_requests
 from app.routers.area import router as area_router
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
+from app.routers.balance import router as balance_router
 from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
 from app.routers.pallet_type import router as pallet_type_router
@@ -71,3 +72,4 @@ app.include_router(movement_router)
 app.include_router(inventory_router)
 app.include_router(audit_router)
 app.include_router(setting_router)
+app.include_router(balance_router)
