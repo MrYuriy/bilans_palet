@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
@@ -15,6 +16,8 @@ from app.routers.auth import router as auth_router
 from app.routers.balance import router as balance_router
 from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
+from app.routers.pages import STATIC_DIR
+from app.routers.pages import router as pages_router
 from app.routers.pallet_type import router as pallet_type_router
 from app.routers.quality import router as quality_router
 from app.routers.setting import router as setting_router
@@ -73,3 +76,6 @@ app.include_router(inventory_router)
 app.include_router(audit_router)
 app.include_router(setting_router)
 app.include_router(balance_router)
+app.include_router(pages_router)
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

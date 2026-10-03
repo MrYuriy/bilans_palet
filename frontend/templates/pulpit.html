@@ -1,0 +1,34 @@
+{% extends "app.html" %}
+
+{% block title %}Pulpit — Bilans Palet EUR{% endblock %}
+{% block page %}pulpit{% endblock %}
+{% block heading %}Pulpit{% endblock %}
+
+{% block actions %}
+<a class="btn hidden" href="/app/nowa-operacja" data-module="movements">Nowa operacja</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <span class="bg nu" id="day-badge"></span>
+    <span class="bg ok hidden" id="closed-badge"></span>
+</div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="card">
+    <div class="hd"><h2>Stan według obszarów</h2><span class="sub">stan bieżący, szt.</span></div>
+    <div class="scroll"><table id="areas-table"></table></div>
+</div>
+
+<div class="card">
+    <div class="hd">
+        <h2>Ostatnie operacje</h2>
+        <span class="sp"></span>
+        <a href="/app/ruchy" class="sub">Cały rejestr</a>
+    </div>
+    <div class="scroll"><table id="recent-table"></table></div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}<script src="/static/js/pulpit.js?v={{ asset_version }}"></script>{% endblock %}

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Bilans Palet EUR{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css?v={{ asset_version }}">
+</head>
+<body data-page="{% block page %}{% endblock %}">
+    {% block body %}{% endblock %}
+
+    <script src="/static/js/api.js?v={{ asset_version }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

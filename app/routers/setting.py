@@ -18,6 +18,7 @@ async def _out(service: SettingsService) -> SettingsOut:
     return SettingsOut(
         day_cutoff=(await service.day_cutoff()).strftime("%H:%M"),
         current_day=await service.current_day(),
+        last_closed_day=await service.last_closed_day(),
     )
 
 

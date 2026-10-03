@@ -8,6 +8,8 @@ class SettingsOut(BaseModel):
     day_cutoff: str
     # The warehouse day it is now.
     current_day: date
+    # The latest closed warehouse day (the D-1 report), None before the first.
+    last_closed_day: date | None = None
 
 
 class SettingsUpdate(BaseModel):

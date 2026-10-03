@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="app">
+    <aside class="side">
+        <div class="brand"><b>BILANS EUR</b><span>Ewidencja palet</span></div>
+        <nav class="nav">
+            <a href="/app/pulpit" data-page="pulpit">Pulpit</a>
+            <a href="/app/ruchy" data-page="ruchy">Rejestr operacji</a>
+            <a href="/app/nowa-operacja" data-page="nowa-operacja" data-module="movements" class="hidden">Nowa operacja</a>
+            <a href="/app/inwentaryzacja" data-page="inwentaryzacja" data-module="movements" class="hidden">Inwentaryzacja</a>
+        </nav>
+        <div class="nav-sep hidden" data-module="settings masterdata users audit"></div>
+        <nav class="nav">
+            <a href="/app/ustawienia" data-page="ustawienia" data-module="settings masterdata users" class="hidden">Ustawienia</a>
+            <a href="/app/audyt" data-page="audyt" data-module="audit" class="hidden">Audyt</a>
+        </nav>
+        <div class="who" id="who">
+            <span class="av"></span>
+            <span><span class="name"></span><span class="role"></span></span>
+            <button class="out" title="Wyloguj">Wyloguj</button>
+        </div>
+    </aside>
+
+    <div class="main">
+        <div class="top">
+            <h1>{% block heading %}{% endblock %}</h1>
+            <span class="crumb" id="crumb">{% block crumb %}{% endblock %}</span>
+            <span class="sp"></span>
+            {% block actions %}{% endblock %}
+        </div>
+        <div class="wrap">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/layout.js?v={{ asset_version }}"></script>
+{% block page_scripts %}{% endblock %}
+{% endblock %}

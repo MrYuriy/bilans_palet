@@ -32,6 +32,7 @@ async def test_default_cutoff_is_six(client, admin_headers):
     assert response.json() == {
         "day_cutoff": "06:00",
         "current_day": warehouse_today().isoformat(),
+        "last_closed_day": None,
     }
 
 
