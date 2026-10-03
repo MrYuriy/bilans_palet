@@ -62,3 +62,8 @@ async def settings_page(request: Request):
 @router.get("/app/audyt")
 async def audit_page(request: Request):
     return templates.TemplateResponse(request, "audyt.html")
+
+
+@router.get("/app/bilans")
+async def daily_balance_page(request: Request):
+    return templates.TemplateResponse(request, "bilans.html")

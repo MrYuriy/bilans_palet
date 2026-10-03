@@ -1,0 +1,32 @@
+{% extends "app.html" %}
+
+{% block title %}Bilans dzienny — Bilans Palet EUR{% endblock %}
+{% block page %}bilans{% endblock %}
+{% block heading %}Bilans dzienny{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="pad row" style="align-items:flex-end">
+        <button class="sm" id="prev-day" title="Poprzednia doba">‹</button>
+        <div class="fld"><label for="day">Doba</label><input type="date" id="day"></div>
+        <button class="sm" id="next-day" title="Następna doba">›</button>
+        <div class="fld"><label for="area">Obszar</label>
+            <select id="area"><option value="">wszystkie</option></select></div>
+        <span class="sp"></span>
+        <span class="bg" id="status"></span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="scroll"><table id="balance"></table></div>
+</div>
+
+<p class="mut" style="margin:0;max-width:90ch">
+    Stan zamknięcia = stan otwarcia + przyjęcia − wysyłki + korekty + przeksięgowania.
+    Przyjęcia obejmują zakup LM, korekty obejmują inwentaryzację.
+    Doba zamknięta pokazuje zapisany bilans; bieżąca doba to podgląd, który zmienia się z każdą operacją.
+</p>
+<div class="msg" id="msg"></div>
+{% endblock %}
+
+{% block page_scripts %}<script src="/static/js/bilans.js?v={{ asset_version }}"></script>{% endblock %}
