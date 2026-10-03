@@ -90,6 +90,13 @@ async function load(day) {
   $("area").onchange = () => load($("day").value);
   $("prev-day").onclick = () => load(shiftDay($("day").value, -1));
   $("next-day").onclick = () => load(shiftDay($("day").value, 1));
+  $("export").onclick = async () => {
+    try {
+      await download("/balances/daily.xlsx", { day: $("day").value, area_uuid: $("area").value });
+    } catch (err) {
+      setMsg($("msg"), err.message);
+    }
+  };
 
   // No day given: the API answers with the last closed one (D-1).
   await load(undefined);

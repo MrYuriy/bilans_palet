@@ -103,3 +103,32 @@ function linesSummary(movement, manyTypes) {
     })
     .join(", ");
 }
+
+// Downloads a file the API serves to signed-in users (a plain link cannot send
+// the token). Saves it under the name from Content-Disposition.
+async function download(path, query) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query || {})) {
+    if (value !== undefined && value !== null && value !== "") params.append(key, value);
+  }
+  const url = params.toString() ? `${path}?${params}` : path;
+  const res = await fetch(url, { headers: { Authorization: "Bearer " + token() } });
+  if (res.status === 401) {
+    logout();
+    throw new Error("Sesja wygasła");
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error((data && data.message) || "Błąd serwera");
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const name = (disposition.match(/filename="([^"]+)"/) || [])[1] || "plik.xlsx";
+  const blob = await res.blob();
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}

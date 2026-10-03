@@ -144,6 +144,14 @@ async function openDetail(uuid) {
     state.offset += PAGE_SIZE;
     load();
   };
+  document.getElementById("f-export").onclick = async () => {
+    setMsg(document.getElementById("export-msg"), "");
+    try {
+      await download("/movements/export.xlsx", filters());
+    } catch (err) {
+      setMsg(document.getElementById("export-msg"), err.message);
+    }
+  };
   document.getElementById("d-close").onclick = () => document.getElementById("detail").close();
 
   await load();
