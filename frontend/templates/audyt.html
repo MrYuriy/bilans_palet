@@ -1,0 +1,41 @@
+{% extends "app.html" %}
+
+{% block title %}Audyt — Bilans Palet EUR{% endblock %}
+{% block page %}audyt{% endblock %}
+{% block heading %}Audyt{% endblock %}
+{% block crumb %}kto, kiedy i co zmienił w użytkownikach, słownikach i ustawieniach{% endblock %}
+
+{% block content %}
+<form class="card" id="filters">
+    <div class="pad row" style="align-items:flex-end">
+        <div class="fld"><label for="f-entity">Obiekt</label>
+            <select id="f-entity">
+                <option value="">wszystkie</option>
+                <option value="user">Użytkownik</option>
+                <option value="area">Obszar</option>
+                <option value="pallet_type">Typ palety</option>
+                <option value="quality">Jakość</option>
+                <option value="settings">Ustawienia</option>
+            </select></div>
+        <div class="fld"><label for="f-user">Autor</label>
+            <select id="f-user"><option value="">wszyscy</option></select></div>
+        <div class="fld"><label for="f-from">Od</label><input type="date" id="f-from"></div>
+        <div class="fld"><label for="f-to">Do</label><input type="date" id="f-to"></div>
+        <button class="pri" type="submit">Filtruj</button>
+        <button type="button" id="f-clear">Wyczyść</button>
+    </div>
+</form>
+
+<div class="card">
+    <div class="scroll"><table id="log"></table></div>
+    <div class="pager">
+        <span class="mut" id="range"></span>
+        <span class="sp"></span>
+        <button class="sm" id="prev">Poprzednia</button>
+        <button class="sm" id="next">Następna</button>
+    </div>
+</div>
+<p class="mut" style="margin:0">Ruchy magazynowe nie trafiają do audytu — są niezmienne i same zapisują autora oraz czas.</p>
+{% endblock %}
+
+{% block page_scripts %}<script src="/static/js/audyt.js?v={{ asset_version }}"></script>{% endblock %}

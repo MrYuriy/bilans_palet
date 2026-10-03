@@ -57,3 +57,8 @@ async def inventory_page(request: Request):
 @router.get("/app/ustawienia")
 async def settings_page(request: Request):
     return templates.TemplateResponse(request, "ustawienia.html")
+
+
+@router.get("/app/audyt")
+async def audit_page(request: Request):
+    return templates.TemplateResponse(request, "audyt.html")
