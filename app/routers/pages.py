@@ -52,3 +52,8 @@ async def new_movement_page(request: Request):
 @router.get("/app/inwentaryzacja")
 async def inventory_page(request: Request):
     return templates.TemplateResponse(request, "inwentaryzacja.html")
+
+
+@router.get("/app/ustawienia")
+async def settings_page(request: Request):
+    return templates.TemplateResponse(request, "ustawienia.html")
