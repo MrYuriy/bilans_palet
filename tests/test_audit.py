@@ -1,10 +1,14 @@
+# ruff: noqa: DTZ001 - audit times are naive local wall-clock times by design
 """The audit log: who changed what in users and dictionaries."""
 
 import json
+from datetime import datetime
+from uuid import uuid4
 
 import pytest
 
 from app.models.area import Area
+from app.models.audit_log import AuditLog
 from app.models.pallet_type import PalletType
 from app.models.quality import Quality
 from tests.conftest import PASSWORD, login, make_user
@@ -210,6 +214,30 @@ async def test_filters_and_total(client, session, admin_headers):
     assert [e["entity_name"] for e in response.json()] == ["EUR", "B"]
     assert [e["entity_name"] for e in by_entity] == ["B", "A"]
     assert [e["entity_name"] for e in by_row] == ["A"]
+
+
+async def test_entries_of_the_same_instant_keep_their_order(
+    client, session, admin_headers
+):
+    # The clock can give two entries the same time; the order must still hold.
+    moment = datetime(2026, 10, 1, 12, 0)
+    for name in ("first", "second", "third"):
+        session.add(
+            AuditLog(
+                username="admin",
+                action="create",
+                entity="area",
+                entity_uuid=uuid4(),
+                entity_name=name,
+                created_at=moment,
+            )
+        )
+        await session.flush()
+    await session.commit()
+
+    entries = await log(client, admin_headers, entity="area")
+
+    assert [e["entity_name"] for e in entries] == ["third", "second", "first"]
 
 
 async def test_movements_are_not_logged(client, session, admin_headers):

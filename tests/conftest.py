@@ -8,7 +8,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event
+from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -20,6 +20,7 @@ from app.core.security import hash_password
 from app.core.timeutils import business_date, local_now
 from app.database.session import get_session
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.role import Role
 from app.models.setting import DEFAULT_DAY_CUTOFF
@@ -44,6 +45,18 @@ def _enforce_foreign_keys(dbapi_connection, _record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+
+
+@event.listens_for(AuditLog, "before_insert")
+def _number_audit_entry(_mapper, connection, entry):
+    # Postgres numbers audit entries itself (identity column); SQLite cannot do
+    # that for a column outside the primary key, so the tests do it here. The
+    # last number is kept too, for several entries flushed together.
+    last = max(
+        connection.info.get("audit_seq", 0),
+        connection.execute(select(func.max(AuditLog.seq))).scalar() or 0,
+    )
+    entry.seq = connection.info["audit_seq"] = last + 1
 
 
 TestSessionLocal = async_sessionmaker(

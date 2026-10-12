@@ -40,7 +40,7 @@ class AuditLogRepository(BaseRepository[AuditLog]):
         query = (
             select(AuditLog)
             .where(*conditions)
-            .order_by(AuditLog.created_at.desc())
+            .order_by(AuditLog.seq.desc())
             .limit(limit)
             .offset(offset)
         )

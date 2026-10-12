@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, Column, ForeignKey, String
+from sqlalchemy import JSON, BigInteger, Column, ForeignKey, Identity, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -16,6 +16,10 @@ class AuditLog(BaseModel, UUIDMixin, TimestampMixin):
     """
 
     __tablename__ = "audit_logs"
+
+    # Insertion order: entries written in the same instant still list in the
+    # order they happened (the clock alone can tie).
+    seq = Column(BigInteger, Identity(), nullable=False, unique=True, index=True)
 
     # SET NULL keeps the entry when the user is deleted; username keeps it readable.
     user_uuid = Column(
