@@ -17,7 +17,7 @@ function renderStock(balance) {
       <div class="kpi">
         <span class="lb">${esc(g.group.name)}</span>
         <span class="v">${fmt(g.total)}</span>
-        <span class="d">szt. w raportach</span>
+        <span class="d">${TypeFilter.isDefault() ? "szt. w raportach" : "szt. · wybrane typy"}</span>
       </div>`
     )
     .join("");
@@ -35,13 +35,17 @@ function renderStock(balance) {
         .join("");
       return `<tr><td colspan="2" class="strong" style="background:#fafbf9">${esc(g.group.name)}</td></tr>
         ${types}
-        <tr class="sum"><td style="padding-left:24px">Razem w raportach</td><td class="num">${fmt(g.total)}</td></tr>`;
+        <tr class="sum"><td style="padding-left:24px">Razem</td><td class="num">${fmt(g.total)}</td></tr>`;
     })
     .join("");
 
   document.getElementById("stock-table").innerHTML = balance.groups.length
     ? `<thead><tr><th>Grupa / typ nośnika</th><th class="num">Stan</th></tr></thead><tbody>${rows}</tbody>`
-    : `<tbody><tr><td class="empty">Brak typów nośników</td></tr></tbody>`;
+    : `<tbody><tr><td class="empty">Nie wybrano typów nośników</td></tr></tbody>`;
+}
+
+async function loadStock() {
+  renderStock(await api("/balances/current", { query: { type: TypeFilter.query() } }));
 }
 
 function renderRecent(movements) {
@@ -66,12 +70,12 @@ function renderRecent(movements) {
 
 (async () => {
   await App.ready;
-  const [settings, balance, recent] = await Promise.all([
+  const [settings, recent] = await Promise.all([
     api("/settings"),
-    api("/balances/current"),
     api("/movements", { query: { limit: 8 } }),
+    TypeFilter.init(document.getElementById("type-filter"), loadStock),
   ]);
   renderDay(settings);
-  renderStock(balance);
   renderRecent(recent);
+  await loadStock();
 })();

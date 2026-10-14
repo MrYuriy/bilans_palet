@@ -70,11 +70,24 @@ async def test_daily_balance_file(client, session, admin_headers, history):
             "Stan zamknięcia",
         ],
         ["EUR", "EURO", 0, 100, 30, 0, 0, 70],
-        ["EUR", "EURO uszkodzone", 0, 0, 0, 0, 0, 0],
-        ["EUR", "EURO utylizacja", 0, 0, 0, 0, 0, 0],
         ["EUR", "RAZEM", 0, 100, 30, 0, 0, 70],
         ["Jednorazowe", "Jednorazowe", 0, 7, 0, 0, 0, 7],
         ["Jednorazowe", "RAZEM", 0, 7, 0, 0, 0, 7],
+    ]
+
+
+async def test_daily_balance_file_with_picked_types(
+    client, admin_headers, carriers, history
+):
+    response = await client.get(
+        "/balances/daily.xlsx",
+        headers=admin_headers,
+        params=[("day", YESTERDAY.isoformat()), ("type", carriers.damaged)],
+    )
+
+    assert [r[:2] for r in rows_from(sheet_of(response), 9)] == [
+        ["EUR", "EURO uszkodzone"],
+        ["EUR", "RAZEM"],
     ]
 
 

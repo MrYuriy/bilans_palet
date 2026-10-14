@@ -64,25 +64,36 @@ def totals(group):
 # ---------- now ----------
 
 
-async def test_current_stock_per_group_and_type(client, admin_headers, history):
+def picked(*types):
+    return [("type", t) for t in types]
+
+
+async def test_by_default_only_types_counted_in_reports(client, admin_headers, history):
     response = await client.get("/balances/current", headers=admin_headers)
 
     eur, single = response.json()["groups"]
     assert eur["group"]["name"] == "EUR"
+    assert (stock(eur), eur["total"]) == ([("EURO", 63)], 63)
+    assert (stock(single), single["total"]) == ([("Jednorazowe", 8)], 8)
+
+
+async def test_the_viewer_picks_the_types_shown(
+    client, admin_headers, carriers, history
+):
+    response = await client.get(
+        "/balances/current",
+        headers=admin_headers,
+        params=picked(carriers.euro, carriers.damaged, carriers.scrap),
+    )
+
+    [eur] = response.json()["groups"]
     assert stock(eur) == [
         ("EURO", 63),
         ("EURO uszkodzone", 10),
         ("EURO utylizacja", 0),
     ]
-    # Only the types counted in reports make the group's total.
-    assert eur["total"] == 63
-    assert (stock(single), single["total"]) == ([("Jednorazowe", 8)], 8)
-
-
-async def test_the_report_flag_comes_with_each_type(client, admin_headers, history):
-    response = await client.get("/balances/current", headers=admin_headers)
-
-    eur = response.json()["groups"][0]
+    # The total adds up the rows shown.
+    assert eur["total"] == 73
     assert [r["carrier_type"]["count_in_reports"] for r in eur["rows"]] == [
         True,
         False,
@@ -90,11 +101,23 @@ async def test_the_report_flag_comes_with_each_type(client, admin_headers, histo
     ]
 
 
+async def test_a_group_without_a_picked_type_is_left_out(
+    client, admin_headers, carriers, history
+):
+    response = await client.get(
+        "/balances/current", headers=admin_headers, params=picked(carriers.damaged)
+    )
+
+    assert [(g["group"]["name"], stock(g)) for g in response.json()["groups"]] == [
+        ("EUR", [("EURO uszkodzone", 10)])
+    ]
+
+
 async def test_an_empty_stock_shows_zeros(client, admin_headers, carriers):
     response = await client.get("/balances/current", headers=admin_headers)
 
     assert [(stock(g), g["total"]) for g in response.json()["groups"]] == [
-        ([("EURO", 0), ("EURO uszkodzone", 0), ("EURO utylizacja", 0)], 0),
+        ([("EURO", 0)], 0),
         ([("Jednorazowe", 0)], 0),
     ]
 
@@ -109,7 +132,11 @@ async def test_an_inactive_type_shows_only_while_it_holds_stock(
             json={"is_active": False},
         )
 
-    response = await client.get("/balances/current", headers=admin_headers)
+    response = await client.get(
+        "/balances/current",
+        headers=admin_headers,
+        params=picked(carriers.euro, carriers.damaged, carriers.scrap),
+    )
 
     # uszkodzone still holds 10, utylizacja holds nothing.
     assert stock(response.json()["groups"][0]) == [
@@ -131,12 +158,17 @@ async def test_a_viewer_sees_the_stock(client, session, history):
 
 
 async def test_a_closed_day_shows_its_stored_balance(
-    client, session, admin_headers, history
+    client, session, admin_headers, carriers, history
 ):
     await DayCloseService(session).close_due_days()
 
     response = await client.get(
-        "/balances/daily", headers=admin_headers, params={"day": YESTERDAY.isoformat()}
+        "/balances/daily",
+        headers=admin_headers,
+        params=[
+            ("day", YESTERDAY.isoformat()),
+            *picked(carriers.euro, carriers.damaged, carriers.single),
+        ],
     )
 
     body = response.json()
@@ -147,10 +179,23 @@ async def test_a_closed_day_shows_its_stored_balance(
     assert day_rows(eur) == [
         ("EURO", 0, 100, 30, -2, -10, 58),
         ("EURO uszkodzone", 0, 0, 0, 0, 10, 10),
-        ("EURO utylizacja", 0, 0, 0, 0, 0, 0),
     ]
-    assert totals(eur) == (0, 100, 30, -2, -10, 58)
+    assert totals(eur) == (0, 100, 30, -2, 0, 68)
     assert day_rows(single) == [("Jednorazowe", 0, 8, 0, 0, 0, 8)]
+
+
+async def test_the_daily_balance_shows_counted_types_by_default(
+    client, session, admin_headers, history
+):
+    await DayCloseService(session).close_due_days()
+
+    response = await client.get(
+        "/balances/daily", headers=admin_headers, params={"day": YESTERDAY.isoformat()}
+    )
+
+    eur = response.json()["groups"][0]
+    assert day_rows(eur) == [("EURO", 0, 100, 30, -2, -10, 58)]
+    assert totals(eur) == (0, 100, 30, -2, -10, 58)
 
 
 async def test_without_a_day_the_last_closed_one_is_shown(
@@ -175,10 +220,7 @@ async def test_the_open_day_is_a_live_preview(client, session, admin_headers, hi
 
     body = response.json()
     assert (body["closed"], body["closed_at"]) == (False, None)
-    assert day_rows(body["groups"][0])[:2] == [
-        ("EURO", 58, 5, 0, 0, 0, 63),
-        ("EURO uszkodzone", 10, 0, 0, 0, 0, 10),
-    ]
+    assert day_rows(body["groups"][0]) == [("EURO", 58, 5, 0, 0, 0, 63)]
 
 
 async def test_closed_numbers_do_not_follow_later_movements(

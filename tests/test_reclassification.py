@@ -3,16 +3,7 @@ to another, in any direction."""
 
 import pytest
 
-from tests.conftest import line, login, make_user, move
-
-
-async def stock(client, headers) -> dict[str, int]:
-    body = (await client.get("/balances/current", headers=headers)).json()
-    return {
-        r["carrier_type"]["name"]: r["quantity"]
-        for group in body["groups"]
-        for r in group["rows"]
-    }
+from tests.conftest import line, login, make_user, move, stock_of
 
 
 @pytest.mark.parametrize(
@@ -50,7 +41,7 @@ async def test_the_total_stock_does_not_change(client, admin_headers, carriers):
         line(carriers.euro, 20, to=carriers.damaged),
     )
 
-    current = await stock(client, admin_headers)
+    current = await stock_of(client, admin_headers, carriers.euro, carriers.damaged)
     assert (current["EURO"], current["EURO uszkodzone"]) == (30, 20)
 
 

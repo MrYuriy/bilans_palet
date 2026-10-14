@@ -99,7 +99,7 @@ def daily_balance_xlsx(data: DailyBalanceOut) -> bytes:
         column=1,
         value="Stan zamknięcia = otwarcie + przyjęcia − wydania + korekty "
         "+ przeksięgowania. Korekty obejmują inwentaryzację. "
-        "Razem grupy liczy tylko typy liczone w raportach.",
+        "Razem = suma pokazanych typów.",
     )
 
     header_row = 8

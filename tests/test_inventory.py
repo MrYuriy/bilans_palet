@@ -3,7 +3,7 @@ the difference, and what stays in the history."""
 
 import pytest
 
-from tests.conftest import line, login, make_user, move, warehouse_today
+from tests.conftest import line, login, make_user, move, stock_of, warehouse_today
 
 
 def counted(carrier_type: str, quantity: int) -> dict:
@@ -14,15 +14,6 @@ async def count(client, headers, *lines, **fields):
     return await client.post(
         "/inventories", headers=headers, json={"lines": list(lines), **fields}
     )
-
-
-async def stock(client, headers) -> dict[str, int]:
-    body = (await client.get("/balances/current", headers=headers)).json()
-    return {
-        r["carrier_type"]["name"]: r["quantity"]
-        for group in body["groups"]
-        for r in group["rows"]
-    }
 
 
 async def receive(client, headers, carrier_type: str, quantity: int):
@@ -86,7 +77,9 @@ async def test_the_starting_stock_is_a_first_count(client, admin_headers, carrie
     )
 
     assert response.status_code == 200, response.text
-    current = await stock(client, admin_headers)
+    current = await stock_of(
+        client, admin_headers, carriers.euro, carriers.damaged, carriers.single
+    )
     assert (current["EURO"], current["EURO uszkodzone"], current["Jednorazowe"]) == (
         1200,
         40,
@@ -100,7 +93,7 @@ async def test_a_count_brings_a_negative_stock_back(client, admin_headers, carri
     response = await count(client, admin_headers, counted(carriers.euro, 10))
 
     assert response.json()["lines"][0]["quantity"] == 40
-    assert (await stock(client, admin_headers))["EURO"] == 10
+    assert (await stock_of(client, admin_headers))["EURO"] == 10
 
 
 async def test_only_counted_rows_change(client, admin_headers, carriers):
@@ -109,7 +102,7 @@ async def test_only_counted_rows_change(client, admin_headers, carriers):
 
     await count(client, admin_headers, counted(carriers.euro, 90))
 
-    current = await stock(client, admin_headers)
+    current = await stock_of(client, admin_headers)
     assert (current["EURO"], current["Jednorazowe"]) == (90, 50)
 
 

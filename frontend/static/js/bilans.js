@@ -49,13 +49,13 @@ function render(data) {
         .join("");
       return `<tr><td colspan="7" class="strong" style="background:#fafbf9">${esc(g.group.name)}</td></tr>
         ${rows}
-        <tr class="sum"><td style="padding-left:24px">Razem w raportach</td>${rowCells(g.total)}</tr>`;
+        <tr class="sum"><td style="padding-left:24px">Razem</td>${rowCells(g.total)}</tr>`;
     })
     .join("");
 
   $("balance").innerHTML = data.groups.length
     ? `${head}<tbody>${groups}</tbody>`
-    : '<tbody><tr><td class="empty">Brak typów nośników</td></tr></tbody>';
+    : '<tbody><tr><td class="empty">Nie wybrano typów nośników</td></tr></tbody>';
 
   $("prev-day").disabled = false;
   $("next-day").disabled = data.day >= currentDay;
@@ -64,7 +64,7 @@ function render(data) {
 async function load(day) {
   setMsg($("msg"), "");
   try {
-    const data = await api("/balances/daily", { query: { day } });
+    const data = await api("/balances/daily", { query: { day, type: TypeFilter.query() } });
     $("day").value = data.day;
     render(data);
   } catch (err) {
@@ -77,13 +77,14 @@ async function load(day) {
   const settings = await api("/settings");
   currentDay = settings.current_day;
   $("day").max = currentDay;
+  await TypeFilter.init($("type-filter"), () => load($("day").value));
 
   $("day").onchange = () => $("day").value && load($("day").value);
   $("prev-day").onclick = () => load(shiftDay($("day").value, -1));
   $("next-day").onclick = () => load(shiftDay($("day").value, 1));
   $("export").onclick = async () => {
     try {
-      await download("/balances/daily.xlsx", { day: $("day").value });
+      await download("/balances/daily.xlsx", { day: $("day").value, type: TypeFilter.query() });
     } catch (err) {
       setMsg($("msg"), err.message);
     }

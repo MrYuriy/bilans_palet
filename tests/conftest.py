@@ -213,6 +213,20 @@ def line(carrier_type: str, quantity: int, to: str | None = None) -> dict:
     return row
 
 
+async def stock_of(client: AsyncClient, headers: dict[str, str], *types: str):
+    """Current stock by type name; the given types (default: those counted in
+    reports)."""
+    params = [("type", t) for t in types]
+    body = (
+        await client.get("/balances/current", headers=headers, params=params)
+    ).json()
+    return {
+        r["carrier_type"]["name"]: r["quantity"]
+        for group in body["groups"]
+        for r in group["rows"]
+    }
+
+
 async def move(
     client: AsyncClient,
     headers: dict[str, str],

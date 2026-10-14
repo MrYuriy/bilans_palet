@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import date
 from uuid import UUID
 
@@ -38,7 +39,8 @@ def _by_group(types: list[CarrierType]) -> list[tuple[GroupRef, list[CarrierType
 class BalanceService:
     """The stock per carrier type: now, and per warehouse day.
 
-    A group's total adds up only the types counted in reports.
+    Reports show the types counted in reports unless the viewer picks others
+    (``type_uuids``); a group's total adds up the rows shown.
     """
 
     def __init__(self, session: AsyncSession):
@@ -47,19 +49,26 @@ class BalanceService:
         self.types = CarrierTypeRepository(session)
         self.settings = SettingsService(session)
 
-    async def _shown(self, with_data: set[UUID]) -> list[CarrierType]:
-        """Active types, plus inactive ones that still have something to show."""
-        return [
-            t
-            for t in await self.types.list_with_group()
-            if t.is_active or t.uuid in with_data
-        ]
+    async def _shown(
+        self, with_data: set[UUID], type_uuids: Collection[UUID] | None
+    ) -> list[CarrierType]:
+        """The types picked; by default the counted ones. An inactive type shows
+        only while it still has something to show."""
+        types = await self.types.list_with_group()
+        if type_uuids is None:
+            picked = [t for t in types if t.count_in_reports]
+        else:
+            wanted = set(type_uuids)
+            picked = [t for t in types if t.uuid in wanted]
+        return [t for t in picked if t.is_active or t.uuid in with_data]
 
     # ---------- now ----------
 
-    async def current(self) -> CurrentBalanceOut:
+    async def current(
+        self, type_uuids: Collection[UUID] | None = None
+    ) -> CurrentBalanceOut:
         stock = await self.movements.balances()
-        types = await self._shown({k for k, v in stock.items() if v})
+        types = await self._shown({k for k, v in stock.items() if v}, type_uuids)
 
         groups = []
         for group, members in _by_group(types):
@@ -71,19 +80,15 @@ class BalanceService:
                 for t in members
             ]
             groups.append(
-                GroupStock(
-                    group=group,
-                    rows=rows,
-                    total=sum(
-                        r.quantity for r in rows if r.carrier_type.count_in_reports
-                    ),
-                )
+                GroupStock(group=group, rows=rows, total=sum(r.quantity for r in rows))
             )
         return CurrentBalanceOut(groups=groups)
 
     # ---------- per day ----------
 
-    async def daily(self, day: date | None) -> DailyBalanceOut:
+    async def daily(
+        self, day: date | None, type_uuids: Collection[UUID] | None = None
+    ) -> DailyBalanceOut:
         """A closed day from its stored balance; the current day as a live preview.
         Without a day: the last closed one (D-1), or today while none is closed."""
         current_day = await self.settings.current_day()
@@ -120,7 +125,7 @@ class BalanceService:
                 r.carrier_type_uuid: r for r in await compute_day(self.session, day)
             }
 
-        types = await self._shown(set(day_rows))
+        types = await self._shown(set(day_rows), type_uuids)
         groups = []
         for group, members in _by_group(types):
             rows = [
@@ -130,11 +135,12 @@ class BalanceService:
                 )
                 for t in members
             ]
-            total = DayValues()
-            for r in rows:
-                if r.carrier_type.count_in_reports:
-                    for field in DayValues.model_fields:
-                        setattr(total, field, getattr(total, field) + getattr(r, field))
+            total = DayValues(
+                **{
+                    field: sum(getattr(r, field) for r in rows)
+                    for field in DayValues.model_fields
+                }
+            )
             groups.append(GroupDay(group=group, rows=rows, total=total))
 
         return DailyBalanceOut(

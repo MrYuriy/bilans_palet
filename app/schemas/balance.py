@@ -27,12 +27,13 @@ class StockRow(BaseModel):
 class GroupStock(BaseModel):
     group: GroupRef
     rows: list[StockRow]
-    # Sum of the rows counted in reports.
+    # Sum of the rows shown.
     total: int
 
 
 class CurrentBalanceOut(BaseModel):
-    """What is in stock now, per carrier group and type."""
+    """What is in stock now, per carrier group and type (the types picked; by
+    default those counted in reports)."""
 
     groups: list[GroupStock]
 
@@ -56,7 +57,7 @@ class DayRowOut(DayValues):
 class GroupDay(BaseModel):
     group: GroupRef
     rows: list[DayRowOut]
-    # Sum of the rows counted in reports.
+    # Sum of the rows shown.
     total: DayValues
 
 
