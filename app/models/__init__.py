@@ -3,6 +3,7 @@ from app.models.base import Base
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
 from app.models.day_closure import DailyBalance, DayClosure
+from app.models.holiday import Holiday
 from app.models.inventory import InventoryLine
 from app.models.movement import Movement, MovementLine, MovementType
 from app.models.role import Role
@@ -16,6 +17,7 @@ __all__ = [
     "CarrierType",
     "DailyBalance",
     "DayClosure",
+    "Holiday",
     "InventoryLine",
     "Movement",
     "MovementLine",

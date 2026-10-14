@@ -33,6 +33,9 @@ function showTab(tab) {
   } else if (tab === "users") {
     document.querySelector('[data-panel="users"]').classList.remove("hidden");
     loadUsers();
+  } else if (tab === "holidays") {
+    document.querySelector('[data-panel="holidays"]').classList.remove("hidden");
+    openHolidays();
   } else {
     document.querySelector('[data-panel="dictionary"]').classList.remove("hidden");
     openDictionary(tab);
@@ -57,6 +60,86 @@ $("day-form").addEventListener("submit", async (e) => {
     await loadDay();
   } catch (err) {
     setMsg($("day-msg"), err.message);
+  }
+});
+
+// ---------- days off ----------
+
+const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
+
+function openHolidays() {
+  const year = new Date().getFullYear();
+  if (!$("h-year").options.length) {
+    $("h-year").innerHTML = [year - 1, year, year + 1, year + 2]
+      .map((y) => `<option value="${y}" ${y === year ? "selected" : ""}>${y}</option>`)
+      .join("");
+  }
+  setMsg($("h-msg"), "");
+  loadHolidays();
+}
+
+async function loadHolidays() {
+  const year = $("h-year").value;
+  $("h-public").textContent = `Dodaj święta państwowe ${year}`;
+  const days = await api(`/holidays/${year}`);
+  $("h-table").innerHTML = days.length
+    ? `<thead><tr><th>Dzień</th><th>Dzień tygodnia</th><th>Nazwa</th><th></th></tr></thead>
+       <tbody>${days
+         .map(
+           (h) => `<tr data-uuid="${h.uuid}">
+             <td class="strong">${fmtDate(h.day)}</td>
+             <td class="mut">${WEEKDAYS[new Date(h.day + "T12:00:00").getDay()]}</td>
+             <td>${esc(h.name)}</td>
+             <td class="row" style="justify-content:flex-end"><button class="sm danger h-delete">Usuń</button></td>
+           </tr>`
+         )
+         .join("")}</tbody>`
+    : `<tbody><tr><td class="empty">Brak dni wolnych w ${year} roku</td></tr></tbody>`;
+  $("h-table").querySelectorAll(".h-delete").forEach((button) => {
+    const tr = button.closest("tr");
+    const day = days.find((h) => h.uuid === tr.dataset.uuid);
+    button.onclick = async () => {
+      if (!confirm(`Usunąć ${fmtDate(day.day)} (${day.name}) z dni wolnych?`)) return;
+      try {
+        await api(`/holidays/${day.uuid}`, { method: "DELETE" });
+        setMsg($("h-msg"), `Usunięto ${fmtDate(day.day)}`, "success");
+        await loadHolidays();
+      } catch (err) {
+        setMsg($("h-msg"), err.message);
+      }
+    };
+  });
+}
+
+$("h-year").onchange = loadHolidays;
+
+$("h-public").onclick = async () => {
+  try {
+    const added = await api(`/holidays/public/${$("h-year").value}`, { method: "POST" });
+    setMsg(
+      $("h-msg"),
+      added.length ? `Dodano ${added.length} ${plural(added.length, "dzień", "dni", "dni")}` : "Wszystkie święta państwowe są już na liście",
+      "success"
+    );
+    await loadHolidays();
+  } catch (err) {
+    setMsg($("h-msg"), err.message);
+  }
+};
+
+$("h-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const day = await api("/holidays", {
+      method: "POST",
+      body: { day: $("h-day").value, name: $("h-name").value },
+    });
+    $("h-form").reset();
+    $("h-year").value = day.day.slice(0, 4);
+    setMsg($("h-msg"), `Dodano ${fmtDate(day.day)}`, "success");
+    await loadHolidays();
+  } catch (err) {
+    setMsg($("h-msg"), err.message);
   }
 });
 

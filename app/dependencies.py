@@ -62,5 +62,8 @@ def require_permission(module: str):
     return dependency
 
 
+# Changing settings and days off — admin only.
+SettingsAdmin = Annotated[User, Depends(require_permission("settings"))]
+
 # Changing dictionaries (carrier groups and types) — admin only.
 MasterdataAdmin = Annotated[User, Depends(require_permission("masterdata"))]

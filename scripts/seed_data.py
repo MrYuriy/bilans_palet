@@ -19,10 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
+from app.core.timeutils import local_now
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
+from app.models.holiday import Holiday
 from app.models.role import Role
 from app.models.user import User
+from app.services.holiday_service import HolidayService
 
 # Make variables from the .env file visible to os.getenv (shell vars still win).
 load_dotenv()
@@ -83,6 +86,19 @@ async def seed_dictionaries(session: AsyncSession) -> list[str]:
 
     await session.flush()
     return filled
+
+
+async def seed_holidays(session: AsyncSession) -> list[int]:
+    """Fill this year's and next year's Polish public holidays while the list is
+    empty; a day the admin removed later is not brought back. Returns the years
+    filled."""
+    if not await _is_empty(session, Holiday):
+        return []
+    year = local_now().year
+    service = HolidayService(session)
+    for each in (year, year + 1):
+        await service.add_public(None, each)
+    return [year, year + 1]
 
 
 async def seed_first_admin(
@@ -156,6 +172,10 @@ async def seed() -> None:
             print("Save it now - it will NOT be shown again.")
         else:
             print(f"Created admin user '{ADMIN_USERNAME}'.")
+
+        years = await seed_holidays(session)
+        if years:
+            print("Filled the public holidays of " + ", ".join(map(str, years)) + ".")
 
         filled = await seed_dictionaries(session)
         if filled:

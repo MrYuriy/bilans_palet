@@ -1,17 +1,12 @@
-from typing import Annotated
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Depends
-
-from app.dependencies import CurrentUserDep, SessionDep, require_permission
-from app.models.user import User
+from app.dependencies import CurrentUserDep, SessionDep, SettingsAdmin
 from app.schemas.setting import SettingsOut, SettingsUpdate
 from app.services.settings_service import SettingsService
 
 # Everyone signed in may read them (the UI shows the warehouse day);
 # only the admin changes them.
 router = APIRouter(prefix="/settings", tags=["Settings"])
-
-SettingsAdmin = Annotated[User, Depends(require_permission("settings"))]
 
 
 async def _out(service: SettingsService) -> SettingsOut:

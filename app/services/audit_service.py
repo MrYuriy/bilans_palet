@@ -20,6 +20,7 @@ ENTITY_LABELS = {
     "quality": "Jakość",
     "carrier_group": "Grupa nośników",
     "carrier_type": "Typ nośnika",
+    "holiday": "Dzień wolny",
     "settings": "Ustawienia",
 }
 

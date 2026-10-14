@@ -7,6 +7,7 @@
 {% block content %}
 <div class="tabs" id="tabs">
     <button class="chip hidden" data-tab="day" data-module="settings">Doba robocza</button>
+    <button class="chip hidden" data-tab="holidays" data-module="settings">Dni wolne</button>
     <button class="chip hidden" data-tab="carrier-groups" data-module="masterdata">Grupy nośników</button>
     <button class="chip hidden" data-tab="carrier-types" data-module="masterdata">Typy nośników</button>
     <button class="chip hidden" data-tab="users" data-module="users">Użytkownicy</button>
@@ -29,6 +30,24 @@
         <div class="mut" id="day-info"></div>
         <div class="msg" id="day-msg"></div>
     </form>
+</section>
+
+<!-- Days off -->
+<section class="card hidden" data-panel="holidays">
+    <div class="hd"><h2>Dni wolne</h2>
+        <span class="sub">Weekendy są wolne zawsze. W dni wolne nie są wysyłane przypomnienia.</span></div>
+    <div class="pad row" style="align-items:flex-end">
+        <div class="fld"><label for="h-year">Rok</label><select id="h-year"></select></div>
+        <button type="button" id="h-public">Dodaj święta państwowe</button>
+        <span class="sp"></span>
+        <form class="row" id="h-form" style="align-items:flex-end">
+            <div class="fld"><label for="h-day">Dzień</label><input type="date" id="h-day" required></div>
+            <div class="fld"><label for="h-name">Nazwa</label><input id="h-name" placeholder="np. dzień wolny firmy"></div>
+            <button class="pri" type="submit">Dodaj dzień</button>
+        </form>
+    </div>
+    <div class="msg pad" id="h-msg" style="padding-top:0"></div>
+    <div class="scroll"><table id="h-table"></table></div>
 </section>
 
 <!-- Dictionaries (one editor for every dictionary) -->
