@@ -8,13 +8,8 @@
 {% block content %}
 <form class="col" id="movement-form" novalidate>
     <div class="card">
-        <div class="hd"><h2>Obszar i typ operacji</h2></div>
+        <div class="hd"><h2>Typ operacji</h2></div>
         <div class="pad col">
-            <div class="fld" id="area-field">
-                <label for="area">Obszar</label>
-                <select id="area"></select>
-            </div>
-            <div class="mut hidden" id="area-fixed"></div>
             <div class="tabs" id="types"></div>
         </div>
     </div>
@@ -36,7 +31,7 @@
                 <input id="document" maxlength="100" placeholder="opcjonalnie">
             </div>
             <div class="fld">
-                <label for="comment" id="comment-label">Komentarz</label>
+                <label for="comment" id="comment-label">Notatka</label>
                 <textarea id="comment" rows="2" placeholder="opcjonalnie"></textarea>
             </div>
         </div>

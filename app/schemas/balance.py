@@ -1,48 +1,63 @@
 from datetime import date, datetime
+from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.schemas.common import NamedRef
+
+class CarrierTypeRef(BaseModel):
+    uuid: UUID
+    name: str
+    count_in_reports: bool
+
+    model_config = {"from_attributes": True}
+
+
+class GroupRef(BaseModel):
+    uuid: UUID
+    name: str
+
+    model_config = {"from_attributes": True}
 
 
 class StockRow(BaseModel):
-    pallet_type: NamedRef
-    quality: NamedRef
+    carrier_type: CarrierTypeRef
     quantity: int
 
 
-class AreaStock(BaseModel):
-    area: NamedRef
+class GroupStock(BaseModel):
+    group: GroupRef
     rows: list[StockRow]
+    # Sum of the rows counted in reports.
+    total: int
 
 
 class CurrentBalanceOut(BaseModel):
-    """What is in stock now: per area, and all of them together."""
+    """What is in stock now, per carrier group and type."""
 
-    areas: list[AreaStock]
-    total: list[StockRow]
-
-
-class DayRowOut(BaseModel):
-    """One pallet type and quality of a warehouse day.
-
-    closing = opening + receipts - shipments + corrections + reclassifications.
-    Receipts include LM purchases; corrections include stock counts.
-    """
-
-    pallet_type: NamedRef
-    quality: NamedRef
-    opening: int
-    receipts: int
-    shipments: int
-    corrections: int
-    reclassifications: int
-    closing: int
+    groups: list[GroupStock]
 
 
-class AreaDay(BaseModel):
-    area: NamedRef
+class DayValues(BaseModel):
+    """closing = opening + receipts - shipments + corrections + reclassifications.
+    Corrections include stock counts."""
+
+    opening: int = 0
+    receipts: int = 0
+    shipments: int = 0
+    corrections: int = 0
+    reclassifications: int = 0
+    closing: int = 0
+
+
+class DayRowOut(DayValues):
+    carrier_type: CarrierTypeRef
+
+
+class GroupDay(BaseModel):
+    group: GroupRef
     rows: list[DayRowOut]
+    # Sum of the rows counted in reports.
+    total: DayValues
 
 
 class DailyBalanceOut(BaseModel):
@@ -50,5 +65,4 @@ class DailyBalanceOut(BaseModel):
     # A closed day shows its stored balance; an open one is a live preview.
     closed: bool
     closed_at: datetime | None
-    areas: list[AreaDay]
-    total: list[DayRowOut]
+    groups: list[GroupDay]

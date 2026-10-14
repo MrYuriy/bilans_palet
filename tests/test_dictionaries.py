@@ -1,4 +1,4 @@
-"""Behaviour shared by every admin-managed dictionary (areas, pallet types, ...)."""
+"""Behaviour shared by every admin-managed dictionary (carrier groups and types)."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -22,31 +22,6 @@ class Dictionary:
 
 
 DICTIONARIES = [
-    pytest.param(
-        Dictionary(
-            url="/areas",
-            not_found="Nie znaleziono obszaru",
-            duplicate="Obszar o tej nazwie już istnieje",
-        ),
-        id="areas",
-    ),
-    pytest.param(
-        Dictionary(
-            url="/pallet-types",
-            not_found="Nie znaleziono typu palety",
-            duplicate="Typ palety o tej nazwie już istnieje",
-        ),
-        id="pallet-types",
-    ),
-    pytest.param(
-        Dictionary(
-            url="/qualities",
-            not_found="Nie znaleziono jakości",
-            duplicate="Jakość o tej nazwie już istnieje",
-            extra=lambda n: {"sort_order": n},
-        ),
-        id="qualities",
-    ),
     pytest.param(
         Dictionary(
             url="/carrier-groups",

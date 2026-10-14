@@ -78,7 +78,7 @@ function setMsg(el, text, kind = "error") {
   el.textContent = text || "";
 }
 
-// Polish plural: plural(1, "obszar", "obszary", "obszarów") -> "obszar";
+// Polish plural: plural(1, "pozycja", "pozycje", "pozycji") -> "pozycja";
 // 2-4 (but not 12-14) take the second form, the rest the third.
 function plural(n, one, few, many) {
   if (n === 1) return one;
@@ -88,18 +88,13 @@ function plural(n, one, few, many) {
   return many;
 }
 
-// "Kategoria I" while there is one pallet type, "EUR · I" once there are more.
-function pairLabel(row, manyTypes) {
-  return manyTypes ? `${row.pallet_type.name} · ${row.quality.name}` : `Kategoria ${row.quality.name}`;
-}
-
-function linesSummary(movement, manyTypes) {
+function linesSummary(movement) {
   if (!movement.lines.length) return '<span class="mut">bez różnic</span>';
   return movement.lines
     .map((l) => {
       const sign = l.quantity > 0 ? "+" : "";
       const cls = l.quantity < 0 ? "neg" : "pos";
-      return `${esc(pairLabel(l, manyTypes))} <span class="${cls}">${sign}${fmt(l.quantity)}</span>`;
+      return `${esc(l.carrier_type.name)} <span class="${cls}">${sign}${fmt(l.quantity)}</span>`;
     })
     .join(", ");
 }

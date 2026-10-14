@@ -12,7 +12,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.core.timeutils import local_now
-from app.schemas.balance import DailyBalanceOut, DayRowOut
+from app.schemas.balance import DailyBalanceOut, DayValues
 from app.schemas.movement import MovementOut
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -47,19 +47,18 @@ def _save(wb: Workbook) -> bytes:
 # ---------- daily balance ----------
 
 DAY_COLUMNS = [
-    "Obszar",
-    "Typ palety",
-    "Jakość",
+    "Grupa",
+    "Typ nośnika",
     "Stan otwarcia",
     "Przyjęcia",
-    "Wysyłki",
+    "Wydania",
     "Korekty",
     "Przeksięgowania",
     "Stan zamknięcia",
 ]
 
 
-def _day_values(r: DayRowOut) -> list[int]:
+def _day_values(r: DayValues) -> list[int]:
     return [
         r.opening,
         r.receipts,
@@ -70,7 +69,7 @@ def _day_values(r: DayRowOut) -> list[int]:
     ]
 
 
-def daily_balance_xlsx(data: DailyBalanceOut, area_label: str) -> bytes:
+def daily_balance_xlsx(data: DailyBalanceOut) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = f"Bilans {data.day.strftime('%d.%m.%Y')}"
@@ -80,12 +79,11 @@ def daily_balance_xlsx(data: DailyBalanceOut, area_label: str) -> bytes:
         if data.closed
         else "podgląd — doba otwarta, liczby mogą się zmienić"
     )
-    ws["A1"] = "Bilans dzienny palet"
+    ws["A1"] = "Bilans dzienny nośników"
     ws["A1"].font = Font(bold=True, size=14)
     info = [
         ("Doba", data.day),
         ("Status", status),
-        ("Obszar", area_label),
         ("Wygenerowano", local_now().replace(microsecond=0)),
     ]
     for offset, (label, value) in enumerate(info, start=2):
@@ -97,29 +95,27 @@ def daily_balance_xlsx(data: DailyBalanceOut, area_label: str) -> bytes:
             cell.number_format = _DATETIME
 
     ws.cell(
-        row=7,
+        row=6,
         column=1,
-        value="Stan zamknięcia = otwarcie + przyjęcia − wysyłki + korekty "
-        "+ przeksięgowania. Przyjęcia obejmują zakup LM, korekty — inwentaryzację.",
+        value="Stan zamknięcia = otwarcie + przyjęcia − wydania + korekty "
+        "+ przeksięgowania. Korekty obejmują inwentaryzację. "
+        "Razem grupy liczy tylko typy liczone w raportach.",
     )
 
-    header_row = 9
+    header_row = 8
     _header(ws, header_row, DAY_COLUMNS)
     row = header_row + 1
-    for area in data.areas:
-        for r in area.rows:
-            ws.append(
-                [area.area.name, r.pallet_type.name, r.quality.name, *_day_values(r)]
-            )
+    for group in data.groups:
+        for r in group.rows:
+            ws.append([group.group.name, r.carrier_type.name, *_day_values(r)])
             row += 1
-    for r in data.total:
-        ws.append(["RAZEM", r.pallet_type.name, r.quality.name, *_day_values(r)])
+        ws.append([group.group.name, "RAZEM", *_day_values(group.total)])
         for col in range(1, len(DAY_COLUMNS) + 1):
             ws.cell(row=row, column=col).font = _BOLD
             ws.cell(row=row, column=col).fill = _TOTAL_FILL
         row += 1
 
-    _widths(ws, [22, 12, 10, 14, 12, 12, 12, 16, 16])
+    _widths(ws, [16, 20, 14, 12, 12, 12, 16, 16])
     return _save(wb)
 
 
@@ -128,9 +124,7 @@ def daily_balance_xlsx(data: DailyBalanceOut, area_label: str) -> bytes:
 MOVEMENT_COLUMNS = [
     "Data operacji",
     "Operacja",
-    "Obszar",
-    "Typ palety",
-    "Jakość",
+    "Typ nośnika",
     "Zmiana stanu",
     "Nr dokumentu",
     "Komentarz",
@@ -154,9 +148,7 @@ def movements_xlsx(movements: list[MovementOut]) -> bytes:
                 [
                     m.operation_date,
                     m.type_label,
-                    m.area.name,
-                    line.pallet_type.name if line else "—",
-                    line.quality.name if line else "—",
+                    line.carrier_type.name if line else "—",
                     line.quantity if line else 0,
                     m.document_number or "",
                     m.comment or "",
@@ -165,10 +157,10 @@ def movements_xlsx(movements: list[MovementOut]) -> bytes:
                 ]
             )
             ws.cell(row=row, column=1).number_format = _DATE
-            ws.cell(row=row, column=10).number_format = _DATETIME
+            ws.cell(row=row, column=8).number_format = _DATETIME
             row += 1
 
-    _widths(ws, [13, 24, 20, 12, 10, 13, 18, 30, 16, 17])
+    _widths(ws, [13, 28, 20, 13, 18, 30, 16, 17])
     ws.auto_filter.ref = (
         f"A1:{get_column_letter(len(MOVEMENT_COLUMNS))}{max(row - 1, 1)}"
     )

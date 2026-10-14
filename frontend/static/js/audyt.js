@@ -13,7 +13,9 @@ const FIELD_LABELS = {
   username: "Login",
   role: "Rola",
   must_change_password: "Wymagana zmiana hasła",
-  areas: "Obszary",
+  group: "Grupa",
+  count_in_reports: "Liczony w raportach",
+  areas: "Obszary", // older entries
   password_changed: "Hasło",
   day_cutoff: "Godzina zamknięcia doby",
 };

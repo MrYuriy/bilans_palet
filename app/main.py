@@ -10,7 +10,6 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.exc import register_exception_handlers
 from app.middleware.logging import log_requests
-from app.routers.area import router as area_router
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.balance import router as balance_router
@@ -20,8 +19,6 @@ from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
 from app.routers.pages import STATIC_DIR
 from app.routers.pages import router as pages_router
-from app.routers.pallet_type import router as pallet_type_router
-from app.routers.quality import router as quality_router
 from app.routers.setting import router as setting_router
 from app.routers.users import router as users_router
 from app.services.day_close_service import day_close_loop
@@ -76,9 +73,6 @@ async def health():
 
 app.include_router(auth_router)
 app.include_router(users_router)
-app.include_router(area_router)
-app.include_router(pallet_type_router)
-app.include_router(quality_router)
 app.include_router(carrier_group_router)
 app.include_router(carrier_type_router)
 app.include_router(movement_router)

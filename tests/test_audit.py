@@ -7,11 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.models.area import Area
 from app.models.audit_log import AuditLog
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
-from tests.conftest import PASSWORD, login, make_user
+from tests.conftest import PASSWORD, line, login, make_user, move
 
 
 async def log(client, headers, **filters):
@@ -20,33 +17,38 @@ async def log(client, headers, **filters):
     return response.json()
 
 
-async def test_creating_an_area_is_logged(client, admin_headers):
-    area = (
-        await client.post("/areas", headers=admin_headers, json={"name": "Wysyłka 445"})
+async def test_creating_a_group_is_logged(client, admin_headers):
+    group = (
+        await client.post(
+            "/carrier-groups", headers=admin_headers, json={"name": "EUR"}
+        )
     ).json()
 
     [entry] = await log(client, admin_headers)
 
     assert entry["username"] == "admin"
     assert (entry["action"], entry["action_label"]) == ("create", "Utworzenie")
-    assert (entry["entity"], entry["entity_label"]) == ("area", "Obszar")
-    assert entry["entity_uuid"] == area["uuid"]
-    assert entry["entity_name"] == "Wysyłka 445"
+    assert (entry["entity"], entry["entity_label"]) == (
+        "carrier_group",
+        "Grupa nośników",
+    )
+    assert entry["entity_uuid"] == group["uuid"]
+    assert entry["entity_name"] == "EUR"
     assert entry["old_data"] is None
     assert entry["new_data"] == {
-        "name": "Wysyłka 445",
+        "name": "EUR",
         "description": None,
         "is_active": True,
     }
 
 
 async def test_an_update_keeps_only_what_changed(client, admin_headers):
-    area = (
-        await client.post("/areas", headers=admin_headers, json={"name": "A"})
+    group = (
+        await client.post("/carrier-groups", headers=admin_headers, json={"name": "A"})
     ).json()
 
     await client.put(
-        f"/areas/{area['uuid']}",
+        f"/carrier-groups/{group['uuid']}",
         headers=admin_headers,
         json={"name": "B", "is_active": False, "description": None},
     )
@@ -59,23 +61,23 @@ async def test_an_update_keeps_only_what_changed(client, admin_headers):
 
 
 async def test_an_update_that_changes_nothing_is_not_logged(client, admin_headers):
-    area = (
-        await client.post("/areas", headers=admin_headers, json={"name": "A"})
+    group = (
+        await client.post("/carrier-groups", headers=admin_headers, json={"name": "A"})
     ).json()
 
     await client.put(
-        f"/areas/{area['uuid']}", headers=admin_headers, json={"name": "A"}
+        f"/carrier-groups/{group['uuid']}", headers=admin_headers, json={"name": "A"}
     )
 
     assert [e["action"] for e in await log(client, admin_headers)] == ["create"]
 
 
 async def test_deleting_is_logged_with_the_last_values(client, admin_headers):
-    area = (
-        await client.post("/areas", headers=admin_headers, json={"name": "A"})
+    group = (
+        await client.post("/carrier-groups", headers=admin_headers, json={"name": "A"})
     ).json()
 
-    await client.delete(f"/areas/{area['uuid']}", headers=admin_headers)
+    await client.delete(f"/carrier-groups/{group['uuid']}", headers=admin_headers)
 
     delete, _create = await log(client, admin_headers)
     assert (delete["action"], delete["action_label"]) == ("delete", "Usunięcie")
@@ -83,50 +85,43 @@ async def test_deleting_is_logged_with_the_last_values(client, admin_headers):
     assert delete["new_data"] is None
 
 
-@pytest.mark.parametrize(
-    ("url", "payload", "entity", "label", "new_data"),
-    [
-        (
-            "/pallet-types",
-            {"name": "EUR"},
-            "pallet_type",
-            "Typ palety",
-            {"name": "EUR", "description": None, "is_active": True},
-        ),
-        (
-            "/qualities",
-            {"name": "I", "sort_order": 1},
-            "quality",
-            "Jakość",
-            {"name": "I", "sort_order": 1, "description": None, "is_active": True},
-        ),
-    ],
-)
-async def test_other_dictionaries_are_logged(
-    client, admin_headers, url, payload, entity, label, new_data
-):
-    await client.post(url, headers=admin_headers, json=payload)
+async def test_carrier_types_are_logged(client, admin_headers):
+    group = (
+        await client.post(
+            "/carrier-groups", headers=admin_headers, json={"name": "EUR"}
+        )
+    ).json()
+    await client.post(
+        "/carrier-types",
+        headers=admin_headers,
+        json={"group_uuid": group["uuid"], "name": "EURO"},
+    )
 
-    [entry] = await log(client, admin_headers)
+    [entry] = await log(client, admin_headers, entity="carrier_type")
 
-    assert (entry["entity"], entry["entity_label"]) == (entity, label)
-    assert entry["new_data"] == new_data
+    assert entry["entity_label"] == "Typ nośnika"
+    assert entry["new_data"] == {
+        "group": "EUR",
+        "name": "EURO",
+        "description": None,
+        "sort_order": 0,
+        "count_in_reports": True,
+        "is_active": True,
+    }
 
 
 async def test_a_refused_change_leaves_no_entry(client, admin_headers):
-    await client.post("/areas", headers=admin_headers, json={"name": "A"})
+    await client.post("/carrier-groups", headers=admin_headers, json={"name": "A"})
 
-    duplicate = await client.post("/areas", headers=admin_headers, json={"name": "A"})
+    duplicate = await client.post(
+        "/carrier-groups", headers=admin_headers, json={"name": "A"}
+    )
 
     assert duplicate.status_code == 409
     assert len(await log(client, admin_headers)) == 1
 
 
-async def test_users_are_logged_without_passwords(client, session, admin_headers):
-    area = Area(name="Wysyłka 445")
-    session.add(area)
-    await session.commit()
-
+async def test_users_are_logged_without_passwords(client, admin_headers):
     created = (
         await client.post(
             "/users",
@@ -135,14 +130,13 @@ async def test_users_are_logged_without_passwords(client, session, admin_headers
                 "username": "jan",
                 "password": "Tajne123!",
                 "role": "admin",
-                "areas": [str(area.uuid)],
             },
         )
     ).json()
     await client.put(
         f"/users/{created['uuid']}",
         headers=admin_headers,
-        json={"password": "Inne456!", "areas": [], "must_change_password": True},
+        json={"password": "Inne456!", "must_change_password": True},
     )
 
     update, create = await log(client, admin_headers, entity="user")
@@ -153,16 +147,13 @@ async def test_users_are_logged_without_passwords(client, session, admin_headers
         "role": "admin",
         "is_active": True,
         "must_change_password": False,
-        "areas": ["Wysyłka 445"],
     }
     assert update["old_data"] == {
         "must_change_password": False,
-        "areas": ["Wysyłka 445"],
         "password_changed": None,
     }
     assert update["new_data"] == {
         "must_change_password": True,
-        "areas": [],
         "password_changed": True,
     }
 
@@ -193,21 +184,27 @@ async def test_changing_ones_own_password_is_logged(client, session, admin_heade
 async def test_entries_outlive_their_author(client, session, admin_headers):
     other = await make_user(session, "anna", role="admin")
     anna = await login(client, "anna")
-    await client.post("/areas", headers=anna, json={"name": "A"})
+    await client.post("/carrier-groups", headers=anna, json={"name": "A"})
 
     await client.delete(f"/users/{other.uuid}", headers=admin_headers)
 
-    entries = await log(client, admin_headers, entity="area")
+    entries = await log(client, admin_headers, entity="carrier_group")
     assert [(e["username"], e["user_uuid"]) for e in entries] == [("anna", None)]
 
 
 async def test_filters_and_total(client, session, admin_headers):
-    a = (await client.post("/areas", headers=admin_headers, json={"name": "A"})).json()
-    await client.post("/areas", headers=admin_headers, json={"name": "B"})
-    await client.post("/pallet-types", headers=admin_headers, json={"name": "EUR"})
+    a = (
+        await client.post("/carrier-groups", headers=admin_headers, json={"name": "A"})
+    ).json()
+    await client.post("/carrier-groups", headers=admin_headers, json={"name": "B"})
+    await client.post(
+        "/carrier-types",
+        headers=admin_headers,
+        json={"group_uuid": a["uuid"], "name": "EUR"},
+    )
 
     response = await client.get("/audit", headers=admin_headers, params={"limit": 2})
-    by_entity = await log(client, admin_headers, entity="area")
+    by_entity = await log(client, admin_headers, entity="carrier_group")
     by_row = await log(client, admin_headers, entity_uuid=a["uuid"])
 
     assert response.headers["X-Total-Count"] == "3"
@@ -226,7 +223,7 @@ async def test_entries_of_the_same_instant_keep_their_order(
             AuditLog(
                 username="admin",
                 action="create",
-                entity="area",
+                entity="carrier_group",
                 entity_uuid=uuid4(),
                 entity_name=name,
                 created_at=moment,
@@ -235,31 +232,14 @@ async def test_entries_of_the_same_instant_keep_their_order(
         await session.flush()
     await session.commit()
 
-    entries = await log(client, admin_headers, entity="area")
+    entries = await log(client, admin_headers, entity="carrier_group")
 
     assert [e["entity_name"] for e in entries] == ["third", "second", "first"]
 
 
-async def test_movements_are_not_logged(client, session, admin_headers):
-    rows = [Area(name="A"), PalletType(name="EUR"), Quality(name="I", sort_order=1)]
-    session.add_all(rows)
-    await session.commit()
-    area, eur, q1 = rows
-
-    response = await client.post(
-        "/movements",
-        headers=admin_headers,
-        json={
-            "type": "RECEIPT",
-            "area_uuid": str(area.uuid),
-            "lines": [
-                {
-                    "pallet_type_uuid": str(eur.uuid),
-                    "quality_uuid": str(q1.uuid),
-                    "quantity": 5,
-                }
-            ],
-        },
+async def test_movements_are_not_logged(client, admin_headers, carriers):
+    response = await move(
+        client, admin_headers, "OTHER_RECEIPT", line(carriers.euro, 5)
     )
 
     assert response.status_code == 200

@@ -1,5 +1,7 @@
 import os
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
+from datetime import date
 
 # Settings are read at import time; tests must not depend on a local .env.
 # The real database is never used: get_session is overridden with SQLite below.
@@ -22,6 +24,8 @@ from app.database.session import get_session
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.base import Base
+from app.models.carrier_group import CarrierGroup
+from app.models.carrier_type import CarrierType
 from app.models.role import Role
 from app.models.setting import DEFAULT_DAY_CUTOFF
 from app.models.user import User
@@ -150,3 +154,76 @@ async def admin_headers(client, session) -> dict[str, str]:
 def warehouse_today():
     """Today's warehouse day under the default cut-off (no settings row in tests)."""
     return business_date(local_now(), DEFAULT_DAY_CUTOFF)
+
+
+# ---------- carriers and movements ----------
+
+
+@dataclass
+class Carriers:
+    """uuids of the carrier groups and types most tests work with."""
+
+    eur_group: str
+    single_group: str
+    euro: str  # EUR group, counted in reports
+    damaged: str  # EUR group, not counted
+    scrap: str  # EUR group, not counted
+    single: str  # Jednorazowe group, counted
+    inactive: str  # EUR group, inactive
+
+
+@pytest_asyncio.fixture
+async def carriers(session) -> Carriers:
+    eur = CarrierGroup(name="EUR")
+    single = CarrierGroup(name="Jednorazowe")
+    session.add_all([eur, single])
+    await session.flush()
+    types = {
+        "euro": CarrierType(group_uuid=eur.uuid, name="EURO", sort_order=1),
+        "damaged": CarrierType(
+            group_uuid=eur.uuid,
+            name="EURO uszkodzone",
+            sort_order=2,
+            count_in_reports=False,
+        ),
+        "scrap": CarrierType(
+            group_uuid=eur.uuid,
+            name="EURO utylizacja",
+            sort_order=3,
+            count_in_reports=False,
+        ),
+        "single": CarrierType(group_uuid=single.uuid, name="Jednorazowe"),
+        "inactive": CarrierType(
+            group_uuid=eur.uuid, name="CHEP", sort_order=9, is_active=False
+        ),
+    }
+    session.add_all(types.values())
+    await session.commit()
+    return Carriers(
+        eur_group=str(eur.uuid),
+        single_group=str(single.uuid),
+        **{key: str(row.uuid) for key, row in types.items()},
+    )
+
+
+def line(carrier_type: str, quantity: int, to: str | None = None) -> dict:
+    row = {"carrier_type_uuid": carrier_type, "quantity": quantity}
+    if to is not None:
+        row["to_carrier_type_uuid"] = to
+    return row
+
+
+async def move(
+    client: AsyncClient,
+    headers: dict[str, str],
+    kind: str,
+    *lines: dict,
+    day: date | None = None,
+    comment: str | None = "test",
+    **fields,
+):
+    """POST a movement; returns the response (not checked)."""
+    payload = {"type": kind, "comment": comment, "lines": list(lines), **fields}
+    if day is not None:
+        payload["operation_date"] = day.isoformat()
+    return await client.post("/movements", headers=headers, json=payload)

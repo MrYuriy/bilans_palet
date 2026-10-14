@@ -14,8 +14,6 @@
         <button class="sm" id="prev-day" title="Poprzednia doba">‹</button>
         <div class="fld"><label for="day">Doba</label><input type="date" id="day"></div>
         <button class="sm" id="next-day" title="Następna doba">›</button>
-        <div class="fld"><label for="area">Obszar</label>
-            <select id="area"><option value="">wszystkie</option></select></div>
         <span class="sp"></span>
         <span class="bg" id="status"></span>
     </div>
@@ -26,8 +24,8 @@
 </div>
 
 <p class="mut" style="margin:0;max-width:90ch">
-    Stan zamknięcia = stan otwarcia + przyjęcia − wysyłki + korekty + przeksięgowania.
-    Przyjęcia obejmują zakup LM, korekty obejmują inwentaryzację.
+    Stan zamknięcia = stan otwarcia + przyjęcia − wydania + korekty + przeksięgowania.
+    Korekty obejmują inwentaryzację. „Razem w raportach” liczy tylko typy liczone w raportach.
     Doba zamknięta pokazuje zapisany bilans; bieżąca doba to podgląd, który zmienia się z każdą operacją.
 </p>
 <div class="msg" id="msg"></div>

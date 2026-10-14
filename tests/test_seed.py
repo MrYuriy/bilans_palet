@@ -1,13 +1,11 @@
 from sqlalchemy import select
 
 from app.core.security import verify_password
-from app.models.area import Area
+from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
 from app.models.role import Role
 from app.models.user import User
-from scripts.seed_data import AREAS, seed_dictionaries, seed_first_admin
+from scripts.seed_data import seed_dictionaries, seed_first_admin
 from tests.conftest import make_user
 
 
@@ -76,10 +74,11 @@ async def test_fills_empty_dictionaries(session):
     filled = await seed_dictionaries(session)
     await session.commit()
 
-    assert filled == ["areas", "pallet types", "qualities", "carrier groups and types"]
-    assert sorted(await names(session, Area, Area.name)) == sorted(AREAS)
-    assert await names(session, PalletType, PalletType.name) == ["EUR"]
-    assert await names(session, Quality, Quality.sort_order) == ["I", "II", "III"]
+    assert filled == ["carrier groups and types"]
+    assert await names(session, CarrierGroup, CarrierGroup.name) == [
+        "EUR",
+        "Jednorazowe",
+    ]
     types = (await session.execute(select(CarrierType))).scalars().all()
     assert {(t.name, t.count_in_reports) for t in types} == {
         ("EURO", True),
@@ -96,20 +95,22 @@ async def test_running_again_adds_nothing(session):
     filled = await seed_dictionaries(session)
 
     assert filled == []
-    assert len(await names(session, Area, Area.name)) == len(AREAS)
+    assert len(await names(session, CarrierType, CarrierType.name)) == 4
 
 
 async def test_does_not_bring_back_what_the_admin_renamed(session):
     await seed_dictionaries(session)
-    area = (
-        await session.execute(select(Area).where(Area.name == "Zwrot 445"))
+    damaged = (
+        await session.execute(
+            select(CarrierType).where(CarrierType.name == "EURO uszkodzone")
+        )
     ).scalar_one()
-    area.name = "Zwroty 445"
+    damaged.name = "EURO do naprawy"
     await session.commit()
 
     await seed_dictionaries(session)
     await session.commit()
 
-    current = await names(session, Area, Area.name)
-    assert "Zwrot 445" not in current
-    assert "Zwroty 445" in current
+    current = await names(session, CarrierType, CarrierType.name)
+    assert "EURO uszkodzone" not in current
+    assert "EURO do naprawy" in current

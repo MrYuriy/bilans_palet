@@ -1,65 +1,68 @@
-// Nowa operacja: area -> movement type -> lines. Saved movements never change;
-// a mistake is fixed with a correction.
-
-const TYPE_HINTS = {
-  RECEIPT: "Ilość przyjętych palet.",
-  LM_PURCHASE: "Dostawa od Leroy Merlin — liczona jak przyjęcie.",
-  SHIPMENT: "Ilość wysłanych palet.",
-  CORRECTION: "Ilość ze znakiem: dodatnia zwiększa, ujemna zmniejsza stan.",
-  RECLASSIFICATION: "Palety przechodzą do gorszej jakości.",
-};
+// Nowa operacja: operation -> lines (carrier type, quantity). Saved movements
+// never change; a mistake is fixed with a correction. Which operations the user
+// may enter, their sign and whether a note is required come from the API.
 
 const state = {
-  type: "RECEIPT",
-  palletTypes: [],
-  qualities: [],
-  stock: {}, // "area|type|quality" -> quantity
+  type: null, // the selected operation (from /movements/types)
+  carrierTypes: [], // active carrier types, in list order
+  stock: {}, // carrier type uuid -> quantity now
 };
 
 const $ = (id) => document.getElementById(id);
 
-function areaUuid() {
-  return $("area").value;
+function hint(op) {
+  if (op.code === "RECLASSIFICATION") return "Ilość przechodzi z jednego typu nośnika na inny.";
+  if (op.code === "CORRECTION") return "Ilość ze znakiem: dodatnia zwiększa, ujemna zmniejsza stan.";
+  const sign = op.sign > 0 ? "zwiększa stan" : "zmniejsza stan";
+  return op.counted_types_only ? `Ilość ${sign}. Tylko typy liczone w raportach.` : `Ilość ${sign}.`;
 }
 
-function available(typeUuid, qualityUuid) {
-  return state.stock[`${areaUuid()}|${typeUuid}|${qualityUuid}`] || 0;
-}
-
-function options(rows, selected) {
-  return rows
-    .map((r) => `<option value="${r.uuid}" ${r.uuid === selected ? "selected" : ""}>${esc(r.name)}</option>`)
+// <option>s grouped by carrier group; ``except`` leaves one type out.
+function typeOptions(types, except) {
+  const groups = new Map();
+  for (const t of types) {
+    if (t.uuid === except) continue;
+    if (!groups.has(t.group.uuid)) groups.set(t.group.uuid, { name: t.group.name, types: [] });
+    groups.get(t.group.uuid).types.push(t);
+  }
+  return [...groups.values()]
+    .map(
+      (g) => `<optgroup label="${esc(g.name)}">${g.types
+        .map((t) => `<option value="${t.uuid}">${esc(t.name)}</option>`)
+        .join("")}</optgroup>`
+    )
     .join("");
+}
+
+function allowedTypes() {
+  return state.type.counted_types_only
+    ? state.carrierTypes.filter((t) => t.count_in_reports)
+    : state.carrierTypes;
 }
 
 // ---------- lines ----------
 
 function lineRow() {
-  const reclass = state.type === "RECLASSIFICATION";
+  const reclass = state.type.code === "RECLASSIFICATION";
   const tr = document.createElement("tr");
   tr.innerHTML = `
-    <td><select class="l-type">${options(state.palletTypes)}</select></td>
-    <td><select class="l-quality">${options(state.qualities)}</select></td>
+    <td><select class="l-type">${typeOptions(allowedTypes())}</select></td>
     ${reclass ? '<td><select class="l-to"></select></td>' : ""}
     <td class="num"><input class="num-in l-qty" type="number" step="1"></td>
-    <td class="mut l-avail"></td>
+    <td class="mut l-stock"></td>
     <td><button type="button" class="sm danger l-remove" title="Usuń pozycję">Usuń</button></td>`;
 
   const refresh = () => {
+    const from = tr.querySelector(".l-type").value;
     if (reclass) {
-      // Only a worse quality (higher sort order) can be the target.
-      const from = state.qualities.find((q) => q.uuid === tr.querySelector(".l-quality").value);
-      const worse = state.qualities.filter((q) => from && q.sort_order > from.sort_order);
       const to = tr.querySelector(".l-to");
-      to.innerHTML = worse.length ? options(worse) : '<option value="">brak gorszej jakości</option>';
+      const kept = to.value;
+      to.innerHTML = typeOptions(state.carrierTypes, from);
+      if (kept && kept !== from) to.value = kept;
     }
-    const takesAway = ["SHIPMENT", "RECLASSIFICATION", "CORRECTION"].includes(state.type);
-    tr.querySelector(".l-avail").textContent = takesAway
-      ? `dostępne: ${fmt(available(tr.querySelector(".l-type").value, tr.querySelector(".l-quality").value))}`
-      : "";
+    tr.querySelector(".l-stock").textContent = `stan: ${fmt(state.stock[from] || 0)}`;
   };
   tr.querySelector(".l-type").onchange = refresh;
-  tr.querySelector(".l-quality").onchange = refresh;
   tr.querySelector(".l-remove").onclick = () => {
     tr.remove();
     if (!$("lines").querySelector("tbody tr")) addLine();
@@ -74,11 +77,11 @@ function addLine() {
 }
 
 function resetLines() {
-  const reclass = state.type === "RECLASSIFICATION";
+  const reclass = state.type.code === "RECLASSIFICATION";
   $("lines").innerHTML = `
-    <thead><tr><th>Typ palety</th><th>${reclass ? "Z jakości" : "Jakość"}</th>
-      ${reclass ? "<th>Do jakości</th>" : ""}
-      <th class="num">${state.type === "CORRECTION" ? "Ilość (+/−)" : "Ilość"}</th><th></th><th></th></tr></thead>
+    <thead><tr><th>${reclass ? "Z typu" : "Typ nośnika"}</th>
+      ${reclass ? "<th>Na typ</th>" : ""}
+      <th class="num">${state.type.code === "CORRECTION" ? "Ilość (+/−)" : "Ilość"}</th><th></th><th></th></tr></thead>
     <tbody></tbody>`;
   addLine();
 }
@@ -87,28 +90,27 @@ function refreshLines() {
   $("lines").querySelectorAll("tbody tr").forEach((tr) => tr.refresh());
 }
 
-// ---------- types ----------
+// ---------- operations ----------
 
 function renderTypes(types) {
-  const chips = types
-    .filter((t) => t.code !== "INVENTORY")
-    .map((t) => `<button type="button" class="chip" data-type="${t.code}">${esc(t.label)}</button>`);
+  const chips = types.map(
+    (t) => `<button type="button" class="chip" data-type="${t.code}">${esc(t.label)}</button>`
+  );
   // A stock count has its own sheet.
-  chips.push('<a class="chip" href="/app/inwentaryzacja">Inwentaryzacja</a>');
+  if (App.can("inventory")) chips.push('<a class="chip" href="/app/inwentaryzacja">Inwentaryzacja</a>');
   $("types").innerHTML = chips.join("");
   $("types").querySelectorAll("button.chip").forEach((chip) => {
-    chip.onclick = () => selectType(chip.dataset.type, chip.textContent);
+    chip.onclick = () => selectType(types.find((t) => t.code === chip.dataset.type));
   });
 }
 
-function selectType(code, label) {
-  state.type = code;
-  $("types").querySelectorAll("button.chip").forEach((c) => c.classList.toggle("on", c.dataset.type === code));
-  $("lines-title").textContent = label || "Pozycje";
-  $("lines-hint").textContent = TYPE_HINTS[code] || "";
-  const correction = code === "CORRECTION";
-  $("comment-label").textContent = correction ? "Komentarz (powód korekty — wymagany)" : "Komentarz";
-  $("comment").placeholder = correction ? "np. uszkodzenie przy rozładunku" : "opcjonalnie";
+function selectType(op) {
+  state.type = op;
+  $("types").querySelectorAll("button.chip").forEach((c) => c.classList.toggle("on", c.dataset.type === op.code));
+  $("lines-title").textContent = op.label;
+  $("lines-hint").textContent = hint(op);
+  $("comment-label").textContent = op.note_required ? "Notatka (wymagana)" : "Notatka";
+  $("comment").placeholder = op.note_required ? "np. powód, odbiorca, nr zlecenia" : "opcjonalnie";
   resetLines();
 }
 
@@ -117,12 +119,11 @@ function selectType(code, label) {
 function collectLines() {
   return [...$("lines").querySelectorAll("tbody tr")].map((tr) => {
     const line = {
-      pallet_type_uuid: tr.querySelector(".l-type").value,
-      quality_uuid: tr.querySelector(".l-quality").value,
+      carrier_type_uuid: tr.querySelector(".l-type").value,
       quantity: parseInt(tr.querySelector(".l-qty").value, 10),
     };
     const to = tr.querySelector(".l-to");
-    if (to) line.to_quality_uuid = to.value || null;
+    if (to) line.to_carrier_type_uuid = to.value || null;
     return line;
   });
 }
@@ -140,15 +141,14 @@ async function save(e) {
     const movement = await api("/movements", {
       method: "POST",
       body: {
-        type: state.type,
-        area_uuid: areaUuid() || null,
+        type: state.type.code,
         document_number: $("document").value,
         comment: $("comment").value,
         lines,
       },
     });
     msg.className = "msg success";
-    msg.innerHTML = `Zapisano: ${esc(movement.type_label)} · ${esc(movement.area.name)} ·
+    msg.innerHTML = `Zapisano: ${esc(movement.type_label)} ·
       <a href="/app/ruchy?ruch=${movement.uuid}">zobacz w rejestrze</a>`;
     $("document").value = "";
     $("comment").value = "";
@@ -164,10 +164,8 @@ async function save(e) {
 async function loadStock() {
   const balance = await api("/balances/current");
   state.stock = {};
-  for (const area of balance.areas) {
-    for (const r of area.rows) {
-      state.stock[`${area.area.uuid}|${r.pallet_type.uuid}|${r.quality.uuid}`] = r.quantity;
-    }
+  for (const group of balance.groups) {
+    for (const r of group.rows) state.stock[r.carrier_type.uuid] = r.quantity;
   }
 }
 
@@ -175,38 +173,22 @@ async function loadStock() {
 
 (async () => {
   await App.ready;
-  if (!App.can("movements")) {
+  const [settings, types, carrierTypes] = await Promise.all([
+    api("/settings"),
+    api("/movements/types"),
+    api("/carrier-types", { query: { active: true } }),
+  ]);
+  const allowed = types.filter((t) => t.can_enter);
+  if (!allowed.length) {
     document.querySelector(".wrap").innerHTML = '<div class="card"><div class="empty">Brak uprawnień do wprowadzania operacji</div></div>';
     return;
   }
-
-  const [settings, types, palletTypes, qualities, allAreas] = await Promise.all([
-    api("/settings"),
-    api("/movements/types"),
-    api("/pallet-types", { query: { active: true } }),
-    api("/qualities", { query: { active: true } }),
-    App.user.role === "admin" ? api("/areas", { query: { active: true } }) : Promise.resolve(null),
-  ]);
-  state.palletTypes = palletTypes;
-  state.qualities = qualities;
+  state.carrierTypes = carrierTypes;
   $("day").textContent = `Doba robocza: ${fmtDate(settings.current_day)}`;
 
-  // The admin works in any area; everyone else in their assigned ones.
-  const areas = allAreas || App.user.areas;
-  $("area").innerHTML = options(areas);
-  if (areas.length === 1) {
-    $("area-field").classList.add("hidden");
-    $("area-fixed").textContent = `Obszar: ${areas[0].name}`;
-    $("area-fixed").classList.remove("hidden");
-  } else if (!areas.length) {
-    setMsg($("msg"), "Nie masz przypisanego obszaru — skontaktuj się z administratorem");
-    $("save").disabled = true;
-  }
-  $("area").onchange = refreshLines;
-
   await loadStock();
-  renderTypes(types);
-  selectType("RECEIPT", types.find((t) => t.code === "RECEIPT").label);
+  renderTypes(allowed);
+  selectType(allowed[0]);
   $("add-line").onclick = addLine;
   $("movement-form").addEventListener("submit", save);
 })();

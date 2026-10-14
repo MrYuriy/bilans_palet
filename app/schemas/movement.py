@@ -6,36 +6,32 @@ from pydantic import BaseModel
 from app.models.movement import MovementType
 from app.schemas.common import NamedRef
 
-# Shown in the UI.
-MOVEMENT_LABELS: dict[MovementType, str] = {
-    MovementType.RECEIPT: "Przyjęcie na magazyn",
-    MovementType.LM_PURCHASE: "Zakup LM",
-    MovementType.SHIPMENT: "Wysyłka z magazynu",
-    MovementType.CORRECTION: "Korekta",
-    MovementType.RECLASSIFICATION: "Przeksięgowanie kategorii",
-    MovementType.INVENTORY: "Inwentaryzacja",
-}
-
 
 class MovementTypeOut(BaseModel):
+    """An operation as the UI needs it to build the form."""
+
     code: MovementType
     label: str
+    # +1 adds, -1 takes away, 0: the lines carry the sign (correction) or it is
+    # special (re-classification, inventory).
+    sign: int
+    note_required: bool
+    counted_types_only: bool
+    # May the current user enter it here (inventory goes through its own screen).
+    can_enter: bool
 
 
 class MovementLineIn(BaseModel):
-    pallet_type_uuid: UUID
-    quality_uuid: UUID
+    carrier_type_uuid: UUID
     # Always positive, except a correction, where the sign says + or -.
     quantity: int
-    # Re-classification only: the worse quality the pallets move to
-    # (quality_uuid is then the quality they leave).
-    to_quality_uuid: UUID | None = None
+    # Re-classification only: the carrier type the quantity moves to
+    # (carrier_type_uuid is the one it leaves).
+    to_carrier_type_uuid: UUID | None = None
 
 
 class MovementCreate(BaseModel):
     type: MovementType
-    # May be left out when the user has exactly one area.
-    area_uuid: UUID | None = None
     # Today when left out.
     operation_date: date | None = None
     document_number: str | None = None
@@ -51,9 +47,8 @@ class UserRef(BaseModel):
 
 
 class MovementLineOut(BaseModel):
-    pallet_type: NamedRef
-    quality: NamedRef
-    # Signed change of the area's balance.
+    carrier_type: NamedRef
+    # Signed change of the stock.
     quantity: int
 
     model_config = {"from_attributes": True}
@@ -62,8 +57,7 @@ class MovementLineOut(BaseModel):
 class InventoryLineOut(BaseModel):
     """A row of a count sheet: the system balance, what was counted, the difference."""
 
-    pallet_type: NamedRef
-    quality: NamedRef
+    carrier_type: NamedRef
     system_quantity: int
     counted_quantity: int
     difference: int
@@ -73,7 +67,6 @@ class MovementOut(BaseModel):
     uuid: UUID
     type: MovementType
     type_label: str
-    area: NamedRef
     user: UserRef
     operation_date: date
     document_number: str | None
@@ -85,15 +78,13 @@ class MovementOut(BaseModel):
 
 
 class InventoryLineIn(BaseModel):
-    pallet_type_uuid: UUID
-    quality_uuid: UUID
+    carrier_type_uuid: UUID
     counted_quantity: int
 
 
 class InventoryCreate(BaseModel):
-    """A stock count of one area. Dated today; only the counted rows change."""
+    """A stock count. Dated today; only the counted rows change."""
 
-    area_uuid: UUID | None = None
     document_number: str | None = None
     comment: str | None = None
     lines: list[InventoryLineIn]
@@ -102,6 +93,6 @@ class InventoryCreate(BaseModel):
 class SheetRowOut(BaseModel):
     """A row of an empty count sheet: what the system holds now."""
 
-    pallet_type: NamedRef
-    quality: NamedRef
+    group: NamedRef
+    carrier_type: NamedRef
     system_quantity: int

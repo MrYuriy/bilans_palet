@@ -22,11 +22,3 @@ class User(BaseModel, UUIDMixin, TimestampMixin):
     role_uuid = Column(UUID(as_uuid=True), ForeignKey("roles.uuid"), nullable=False)
 
     role = relationship("Role", back_populates="users")
-
-    # Areas the admin assigned; one → used automatically, several → the user picks.
-    areas = relationship(
-        "Area",
-        secondary="user_areas",
-        order_by="Area.name",
-        passive_deletes=True,
-    )

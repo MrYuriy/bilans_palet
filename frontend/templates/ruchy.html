@@ -5,7 +5,7 @@
 {% block heading %}Rejestr operacji{% endblock %}
 
 {% block actions %}
-<a class="btn hidden" href="/app/nowa-operacja" data-module="movements">Nowa operacja</a>
+<a class="btn hidden" href="/app/nowa-operacja" data-module="operations reclassification">Nowa operacja</a>
 {% endblock %}
 
 {% block content %}
@@ -15,8 +15,8 @@
         <div class="fld"><label for="f-to">Do</label><input type="date" id="f-to"></div>
         <div class="fld"><label for="f-type">Typ operacji</label>
             <select id="f-type"><option value="">wszystkie</option></select></div>
-        <div class="fld"><label for="f-area">Obszar</label>
-            <select id="f-area"><option value="">wszystkie</option></select></div>
+        <div class="fld"><label for="f-carrier">Typ nośnika</label>
+            <select id="f-carrier"><option value="">wszystkie</option></select></div>
         <button class="pri" type="submit">Filtruj</button>
         <button type="button" id="f-clear">Wyczyść</button>
         <span class="sp"></span>

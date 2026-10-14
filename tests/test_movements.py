@@ -1,465 +1,311 @@
-"""Movement documents: receipts, LM purchases, shipments and corrections."""
+"""Movement documents: the operations, their signs and rules, and the register."""
 
-from dataclasses import dataclass
 from datetime import timedelta
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import insert
 
-from app.models.area import Area
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
-from app.models.user_area import user_areas
-from tests.conftest import login, make_user, warehouse_today
+from tests.conftest import line, login, make_user, move, warehouse_today
+
+# ---------- the operations ----------
 
 
-@dataclass
-class World:
-    area_a: str
-    area_b: str
-    inactive_area: str
-    eur: str
-    inactive_type: str
-    q1: str
-    q2: str
-    inactive_quality: str
-
-
-@pytest.fixture
-async def world(session) -> World:
-    rows = {
-        "area_a": Area(name="Przyjęcia 445"),
-        "area_b": Area(name="Wysyłka 445"),
-        "inactive_area": Area(name="Stary", is_active=False),
-        "eur": PalletType(name="EUR"),
-        "inactive_type": PalletType(name="CHEP", is_active=False),
-        "q1": Quality(name="I", sort_order=1),
-        "q2": Quality(name="II", sort_order=2),
-        "inactive_quality": Quality(name="X", sort_order=9, is_active=False),
-    }
-    session.add_all(rows.values())
-    await session.commit()
-    return World(**{key: str(row.uuid) for key, row in rows.items()})
-
-
-async def operator(client, session, world, *areas, role="operator"):
-    """Create a user with the given area keys assigned and log them in."""
-    user = await make_user(session, "jan", role=role)
-    if areas:
-        await session.execute(
-            insert(user_areas),
-            [
-                {"user_uuid": user.uuid, "area_uuid": UUID(getattr(world, key))}
-                for key in areas
-            ],
-        )
-        await session.commit()
-    return await login(client, "jan")
-
-
-def line(world, quantity, pallet_type=None, quality=None):
-    return {
-        "pallet_type_uuid": pallet_type or world.eur,
-        "quality_uuid": quality or world.q1,
-        "quantity": quantity,
-    }
-
-
-async def post(client, headers, **payload):
-    return await client.post("/movements", headers=headers, json=payload)
-
-
-async def receive(client, headers, world, area_key, quantity):
-    """Put EUR / I pallets into an area, so they can be shipped or corrected."""
-    response = await post(
-        client,
-        headers,
-        type="RECEIPT",
-        area_uuid=getattr(world, area_key),
-        lines=[line(world, quantity)],
-    )
-    assert response.status_code == 200, response.text
-
-
-# ---------- the movement kinds ----------
-
-
-async def test_receipt_adds_pallets(client, admin_headers, world):
-    response = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        document_number=" PZ/12 ",
-        comment="dostawa",
-        lines=[line(world, 320)],
-    )
+@pytest.mark.parametrize(
+    ("kind", "label", "stored"),
+    [
+        ("PRODUCER_RECEIPT", "Przyjęcie od producentów EURO", 40),
+        ("PRODUCER_SHIPMENT", "Wysyłka do producentów EURO", -40),
+        ("ECOM_TRANSFER", "Przesunięcie na ECOM", -40),
+        ("OTHER_RECEIPT", "Inne — przyjęcie", 40),
+        ("OTHER_SHIPMENT", "Inne — wydanie", -40),
+    ],
+)
+async def test_each_operation_adds_or_takes(
+    client, admin_headers, carriers, kind, label, stored
+):
+    response = await move(client, admin_headers, kind, line(carriers.euro, 40))
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["type"] == "RECEIPT"
-    assert body["type_label"] == "Przyjęcie na magazyn"
-    assert body["area"]["name"] == "Przyjęcia 445"
+    assert (body["type"], body["type_label"]) == (kind, label)
+    assert [(ln["carrier_type"]["name"], ln["quantity"]) for ln in body["lines"]] == [
+        ("EURO", stored)
+    ]
+
+
+async def test_a_movement_keeps_its_details(client, admin_headers, carriers):
+    response = await move(
+        client,
+        admin_headers,
+        "PRODUCER_SHIPMENT",
+        line(carriers.damaged, 12),
+        line(carriers.scrap, 3),
+        document_number=" WZ/12 ",
+        comment="  do naprawy ",
+    )
+
+    body = response.json()
     assert body["user"]["username"] == "admin"
     assert body["operation_date"] == warehouse_today().isoformat()
-    assert body["document_number"] == "PZ/12"
-    assert body["comment"] == "dostawa"
-    assert [
-        (ln["pallet_type"]["name"], ln["quality"]["name"], ln["quantity"])
-        for ln in body["lines"]
-    ] == [("EUR", "I", 320)]
-
-
-async def test_lm_purchase_adds_pallets(client, admin_headers, world):
-    response = await post(
-        client,
-        admin_headers,
-        type="LM_PURCHASE",
-        area_uuid=world.area_a,
-        lines=[line(world, 50)],
-    )
-
-    assert response.json()["type_label"] == "Zakup LM"
-    assert response.json()["lines"][0]["quantity"] == 50
-
-
-async def test_shipment_is_stored_as_a_minus(client, admin_headers, world):
-    await receive(client, admin_headers, world, "area_b", 40)
-
-    response = await post(
-        client,
-        admin_headers,
-        type="SHIPMENT",
-        area_uuid=world.area_b,
-        lines=[line(world, 40)],
-    )
-
-    assert response.json()["type_label"] == "Wysyłka z magazynu"
-    assert response.json()["lines"][0]["quantity"] == -40
+    assert (body["document_number"], body["comment"]) == ("WZ/12", "do naprawy")
+    assert [(ln["carrier_type"]["name"], ln["quantity"]) for ln in body["lines"]] == [
+        ("EURO uszkodzone", -12),
+        ("EURO utylizacja", -3),
+    ]
 
 
 @pytest.mark.parametrize("quantity", [15, -15])
-async def test_correction_keeps_its_sign(client, admin_headers, world, quantity):
-    await receive(client, admin_headers, world, "area_a", 15)
-
-    response = await post(
-        client,
-        admin_headers,
-        type="CORRECTION",
-        area_uuid=world.area_a,
-        comment="spis ręczny",
-        lines=[line(world, quantity)],
+async def test_a_correction_keeps_its_sign(client, admin_headers, carriers, quantity):
+    response = await move(
+        client, admin_headers, "CORRECTION", line(carriers.euro, quantity)
     )
 
     assert response.status_code == 200, response.text
     assert response.json()["lines"][0]["quantity"] == quantity
 
 
-async def test_a_document_keeps_several_lines_in_order(client, admin_headers, world):
-    response = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        lines=[line(world, 320), line(world, 30, quality=world.q2)],
+async def test_the_stock_may_go_below_zero(client, admin_headers, carriers):
+    response = await move(
+        client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 500)
     )
 
-    assert [
-        (ln["quality"]["name"], ln["quantity"]) for ln in response.json()["lines"]
-    ] == [("I", 320), ("II", 30)]
+    assert response.status_code == 200, response.text
+    current = (await client.get("/balances/current", headers=admin_headers)).json()
+    assert current["groups"][0]["rows"][0]["quantity"] == -500
+
+
+async def test_a_producer_receipt_is_only_for_counted_types(
+    client, admin_headers, carriers
+):
+    single = await move(
+        client, admin_headers, "PRODUCER_RECEIPT", line(carriers.single, 5)
+    )
+    damaged = await move(
+        client, admin_headers, "PRODUCER_RECEIPT", line(carriers.damaged, 5)
+    )
+
+    assert single.status_code == 200, single.text
+    assert damaged.status_code == 400
+    assert damaged.json() == {
+        "message": "„Przyjęcie od producentów EURO” dotyczy tylko typów liczonych"
+        " w raportach, nie „EURO uszkodzone”"
+    }
+
+
+@pytest.mark.parametrize(
+    ("kind", "label"),
+    [
+        ("OTHER_RECEIPT", "Inne — przyjęcie"),
+        ("OTHER_SHIPMENT", "Inne — wydanie"),
+        ("CORRECTION", "Korekta stanu"),
+    ],
+)
+async def test_some_operations_need_a_note(
+    client, admin_headers, carriers, kind, label
+):
+    response = await move(
+        client, admin_headers, kind, line(carriers.euro, 3), comment="   "
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": f"„{label}” wymaga notatki"}
+
+
+@pytest.mark.parametrize("kind", ["PRODUCER_RECEIPT", "ECOM_TRANSFER"])
+async def test_others_take_a_note_but_do_not_need_it(
+    client, admin_headers, carriers, kind
+):
+    response = await move(
+        client, admin_headers, kind, line(carriers.euro, 3), comment=None
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["comment"] is None
 
 
 # ---------- validation ----------
 
 
 @pytest.mark.parametrize(
-    ("payload", "message"),
+    ("kind", "lines", "message"),
     [
-        ({"type": "RECEIPT", "lines": []}, "Dodaj co najmniej jedną pozycję"),
-        (
-            {"type": "RECEIPT", "lines": [{"quantity": 0}]},
-            "Ilość musi być większa od zera",
-        ),
-        (
-            {"type": "SHIPMENT", "lines": [{"quantity": -5}]},
-            "Ilość musi być większa od zera",
-        ),
-        (
-            {"type": "CORRECTION", "comment": "x", "lines": [{"quantity": 0}]},
-            "Ilość korekty nie może być zerowa",
-        ),
-        (
-            {"type": "CORRECTION", "comment": "  ", "lines": [{"quantity": 3}]},
-            "Podaj powód korekty w komentarzu",
-        ),
-        (
-            {"type": "RECEIPT", "lines": [{"quantity": 1, "pallet_type": "unknown"}]},
-            "Nieznany typ palety",
-        ),
-        (
-            {"type": "RECEIPT", "lines": [{"quantity": 1, "pallet_type": "inactive"}]},
-            "Typ palety „CHEP” jest nieaktywny",
-        ),
-        (
-            {"type": "RECEIPT", "lines": [{"quantity": 1, "quality": "unknown"}]},
-            "Nieznana jakość",
-        ),
-        (
-            {"type": "RECEIPT", "lines": [{"quantity": 1, "quality": "inactive"}]},
-            "Jakość „X” jest nieaktywna",
-        ),
+        ("ECOM_TRANSFER", [], "Dodaj co najmniej jedną pozycję"),
+        ("ECOM_TRANSFER", [("euro", 0)], "Ilość musi być większa od zera"),
+        ("OTHER_RECEIPT", [("euro", -5)], "Ilość musi być większa od zera"),
+        ("CORRECTION", [("euro", 0)], "Ilość korekty nie może być zerowa"),
+        ("ECOM_TRANSFER", [("unknown", 1)], "Nieznany typ nośnika"),
+        ("ECOM_TRANSFER", [("inactive", 1)], "Typ nośnika „CHEP” jest nieaktywny"),
     ],
 )
-async def test_invalid_documents(client, admin_headers, world, payload, message):
-    pallet_types = {"unknown": str(uuid4()), "inactive": world.inactive_type}
-    qualities = {"unknown": str(uuid4()), "inactive": world.inactive_quality}
-    lines = [
-        line(
-            world,
-            raw["quantity"],
-            pallet_type=pallet_types.get(raw.get("pallet_type")),
-            quality=qualities.get(raw.get("quality")),
-        )
-        for raw in payload["lines"]
-    ]
+async def test_invalid_documents(client, admin_headers, carriers, kind, lines, message):
+    types = {
+        "euro": carriers.euro,
+        "inactive": carriers.inactive,
+        "unknown": str(uuid4()),
+    }
 
-    response = await post(
-        client,
-        admin_headers,
-        **{**payload, "lines": lines},
-        area_uuid=world.area_a,
+    response = await move(
+        client, admin_headers, kind, *(line(types[t], q) for t, q in lines)
     )
 
     assert response.status_code == 400
     assert response.json() == {"message": message}
 
 
-async def test_unknown_type_is_rejected(client, admin_headers, world):
-    response = await post(
-        client, admin_headers, type="TELEPORT", area_uuid=world.area_a, lines=[]
+async def test_a_target_type_belongs_to_a_reclassification_only(
+    client, admin_headers, carriers
+):
+    response = await move(
+        client,
+        admin_headers,
+        "ECOM_TRANSFER",
+        line(carriers.euro, 1, to=carriers.damaged),
     )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "Typ docelowy dotyczy tylko przeksięgowania"}
+
+
+async def test_an_inventory_is_not_entered_as_a_movement(
+    client, admin_headers, carriers
+):
+    response = await move(client, admin_headers, "INVENTORY", line(carriers.euro, 1))
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "Inwentaryzację wprowadza się arkuszem spisu"}
+
+
+async def test_an_unknown_operation_is_rejected(client, admin_headers, carriers):
+    response = await move(client, admin_headers, "RECEIPT", line(carriers.euro, 1))
 
     assert response.status_code == 422
     assert response.json()["message"] == "Nieprawidłowe dane: type"
 
 
-async def test_operation_date_in_the_past_is_fine(client, admin_headers, world):
-    yesterday = (warehouse_today() - timedelta(days=1)).isoformat()
+async def test_an_operation_date_in_the_past_is_fine(client, admin_headers, carriers):
+    yesterday = warehouse_today() - timedelta(days=1)
 
-    response = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        operation_date=yesterday,
-        lines=[line(world, 1)],
+    response = await move(
+        client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 1), day=yesterday
     )
 
-    assert response.json()["operation_date"] == yesterday
+    assert response.json()["operation_date"] == yesterday.isoformat()
 
 
-async def test_operation_date_in_the_future_is_rejected(client, admin_headers, world):
-    tomorrow = (warehouse_today() + timedelta(days=1)).isoformat()
+async def test_an_operation_date_in_the_future_is_rejected(
+    client, admin_headers, carriers
+):
+    tomorrow = warehouse_today() + timedelta(days=1)
 
-    response = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        operation_date=tomorrow,
-        lines=[line(world, 1)],
+    response = await move(
+        client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 1), day=tomorrow
     )
 
     assert response.status_code == 400
     assert response.json() == {"message": "Data operacji nie może być z przyszłości"}
 
 
-# ---------- areas ----------
+# ---------- who may enter ----------
 
 
-async def test_the_only_area_is_used_automatically(client, session, world):
-    headers = await operator(client, session, world, "area_b")
+async def test_an_operator_enters_operations(client, session, carriers):
+    await make_user(session, "jan", role="operator")
+    headers = await login(client, "jan")
 
-    response = await post(client, headers, type="RECEIPT", lines=[line(world, 5)])
+    response = await move(client, headers, "ECOM_TRANSFER", line(carriers.euro, 5))
 
     assert response.status_code == 200, response.text
-    assert response.json()["area"]["name"] == "Wysyłka 445"
 
 
-async def test_with_several_areas_one_must_be_chosen(client, session, world):
-    headers = await operator(client, session, world, "area_a", "area_b")
+async def test_a_viewer_cannot_enter_operations(client, session, carriers):
+    await make_user(session, "jan", role="viewer")
+    headers = await login(client, "jan")
 
-    response = await post(client, headers, type="RECEIPT", lines=[line(world, 5)])
-
-    assert response.status_code == 400
-    assert response.json() == {"message": "Wybierz obszar"}
-
-
-async def test_operator_cannot_use_an_area_not_assigned(client, session, world):
-    headers = await operator(client, session, world, "area_a")
-
-    response = await post(
-        client, headers, type="RECEIPT", area_uuid=world.area_b, lines=[line(world, 5)]
-    )
-
-    assert response.status_code == 403
-    assert response.json() == {"message": "Brak dostępu do obszaru"}
-
-
-async def test_admin_may_use_any_area(client, admin_headers, world):
-    response = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_b,
-        lines=[line(world, 5)],
-    )
-
-    assert response.status_code == 200
-
-
-async def test_an_inactive_area_is_rejected(client, admin_headers, world):
-    response = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.inactive_area,
-        lines=[line(world, 5)],
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {"message": "Obszar „Stary” jest nieaktywny"}
-
-
-async def test_viewer_cannot_enter_movements(client, session, world):
-    headers = await operator(client, session, world, "area_a", role="viewer")
-
-    response = await post(
-        client, headers, type="RECEIPT", area_uuid=world.area_a, lines=[line(world, 5)]
-    )
+    response = await move(client, headers, "ECOM_TRANSFER", line(carriers.euro, 5))
 
     assert response.status_code == 403
     assert response.json() == {"message": "Brak uprawnień"}
 
 
+async def test_the_operations_say_who_may_enter_them(client, session, admin_headers):
+    await make_user(session, "jan", role="viewer")
+    viewer = await login(client, "jan")
+
+    admin_view = (await client.get("/movements/types", headers=admin_headers)).json()
+    viewer_view = (await client.get("/movements/types", headers=viewer)).json()
+
+    assert [(t["code"], t["label"], t["sign"]) for t in admin_view] == [
+        ("PRODUCER_RECEIPT", "Przyjęcie od producentów EURO", 1),
+        ("PRODUCER_SHIPMENT", "Wysyłka do producentów EURO", -1),
+        ("ECOM_TRANSFER", "Przesunięcie na ECOM", -1),
+        ("OTHER_RECEIPT", "Inne — przyjęcie", 1),
+        ("OTHER_SHIPMENT", "Inne — wydanie", -1),
+        ("CORRECTION", "Korekta stanu", 0),
+        ("RECLASSIFICATION", "Przeksięgowanie", 0),
+        ("INVENTORY", "Inwentaryzacja", 0),
+    ]
+    # The inventory has its own screen.
+    assert [t["code"] for t in admin_view if not t["can_enter"]] == ["INVENTORY"]
+    assert not any(t["can_enter"] for t in viewer_view)
+    receipt = admin_view[0]
+    assert (receipt["counted_types_only"], receipt["note_required"]) == (True, False)
+
+
 # ---------- reading ----------
 
 
-async def test_list_is_newest_first_with_a_total(client, admin_headers, world):
-    old = (warehouse_today() - timedelta(days=3)).isoformat()
-    for operation_date, quantity in [(old, 1), (None, 2), (None, 3)]:
-        await post(
+async def test_the_list_is_newest_first_with_a_total(client, admin_headers, carriers):
+    old = warehouse_today() - timedelta(days=3)
+    for day, quantity in [(old, 1), (None, 2), (None, 3)]:
+        await move(
             client,
             admin_headers,
-            type="RECEIPT",
-            area_uuid=world.area_a,
-            operation_date=operation_date,
-            lines=[line(world, quantity)],
+            "OTHER_RECEIPT",
+            line(carriers.euro, quantity),
+            day=day,
         )
 
     response = await client.get("/movements?limit=2", headers=admin_headers)
 
     assert response.headers["X-Total-Count"] == "3"
     assert [m["lines"][0]["quantity"] for m in response.json()] == [3, 2]
-
     rest = await client.get("/movements?limit=2&offset=2", headers=admin_headers)
     assert [m["lines"][0]["quantity"] for m in rest.json()] == [1]
 
 
-async def test_list_filters(client, admin_headers, world):
-    old = (warehouse_today() - timedelta(days=3)).isoformat()
-    await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        operation_date=old,
-        lines=[line(world, 1)],
+async def test_the_list_filters(client, admin_headers, carriers):
+    old = warehouse_today() - timedelta(days=3)
+    await move(client, admin_headers, "OTHER_RECEIPT", line(carriers.euro, 1), day=old)
+    await move(client, admin_headers, "ECOM_TRANSFER", line(carriers.single, 2))
+
+    by_type = await client.get("/movements?type=ECOM_TRANSFER", headers=admin_headers)
+    by_carrier = await client.get(
+        f"/movements?carrier_type_uuid={carriers.single}", headers=admin_headers
     )
-    await receive(client, admin_headers, world, "area_b", 2)
-    await post(
-        client,
-        admin_headers,
-        type="SHIPMENT",
-        area_uuid=world.area_b,
-        lines=[line(world, 2)],
+    by_date = await client.get(
+        f"/movements?date_to={old.isoformat()}", headers=admin_headers
     )
 
-    by_type = await client.get("/movements?type=SHIPMENT", headers=admin_headers)
-    by_area = await client.get(
-        f"/movements?area_uuid={world.area_a}", headers=admin_headers
-    )
-    by_date = await client.get(f"/movements?date_to={old}", headers=admin_headers)
-
-    assert [m["type"] for m in by_type.json()] == ["SHIPMENT"]
-    assert [m["area"]["name"] for m in by_area.json()] == ["Przyjęcia 445"]
-    assert [m["operation_date"] for m in by_date.json()] == [old]
+    assert [m["type"] for m in by_type.json()] == ["ECOM_TRANSFER"]
+    assert [m["type"] for m in by_carrier.json()] == ["ECOM_TRANSFER"]
+    assert [m["operation_date"] for m in by_date.json()] == [old.isoformat()]
 
 
-async def test_operator_sees_only_their_areas(client, session, admin_headers, world):
-    await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        lines=[line(world, 1)],
-    )
-    other = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_b,
-        lines=[line(world, 2)],
-    )
-    headers = await operator(client, session, world, "area_a")
+async def test_everyone_signed_in_reads_the_register(
+    client, session, admin_headers, carriers
+):
+    created = await move(client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 1))
+    await make_user(session, "jan", role="viewer")
+    headers = await login(client, "jan")
 
     listed = await client.get("/movements", headers=headers)
-    foreign_list = await client.get(
-        f"/movements?area_uuid={world.area_b}", headers=headers
-    )
-    foreign_one = await client.get(
-        f"/movements/{other.json()['uuid']}", headers=headers
-    )
+    one = await client.get(f"/movements/{created.json()['uuid']}", headers=headers)
 
-    assert [m["area"]["name"] for m in listed.json()] == ["Przyjęcia 445"]
     assert listed.headers["X-Total-Count"] == "1"
-    assert foreign_list.status_code == foreign_one.status_code == 403
+    assert one.json() == created.json()
 
 
-async def test_viewer_sees_every_area(client, session, admin_headers, world):
-    for area in (world.area_a, world.area_b):
-        await post(
-            client,
-            admin_headers,
-            type="RECEIPT",
-            area_uuid=area,
-            lines=[line(world, 1)],
-        )
-    headers = await operator(client, session, world, role="viewer")
-
-    listed = await client.get("/movements", headers=headers)
-
-    assert listed.headers["X-Total-Count"] == "2"
-
-
-async def test_get_one_movement(client, admin_headers, world):
-    created = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        lines=[line(world, 7)],
-    )
-
-    response = await client.get(
-        f"/movements/{created.json()['uuid']}", headers=admin_headers
-    )
-
-    assert response.json() == created.json()
-
-
-async def test_get_a_missing_movement(client, admin_headers):
+async def test_a_missing_movement(client, admin_headers):
     response = await client.get(f"/movements/{uuid4()}", headers=admin_headers)
 
     assert response.status_code == 404
@@ -467,29 +313,10 @@ async def test_get_a_missing_movement(client, admin_headers):
 
 
 async def test_a_saved_movement_cannot_be_edited_or_deleted(
-    client, admin_headers, world
+    client, admin_headers, carriers
 ):
-    created = await post(
-        client,
-        admin_headers,
-        type="RECEIPT",
-        area_uuid=world.area_a,
-        lines=[line(world, 7)],
-    )
+    created = await move(client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 7))
     url = f"/movements/{created.json()['uuid']}"
 
     assert (await client.put(url, headers=admin_headers, json={})).status_code == 405
     assert (await client.delete(url, headers=admin_headers)).status_code == 405
-
-
-async def test_movement_types_have_polish_labels(client, admin_headers):
-    response = await client.get("/movements/types", headers=admin_headers)
-
-    assert response.json() == [
-        {"code": "RECEIPT", "label": "Przyjęcie na magazyn"},
-        {"code": "LM_PURCHASE", "label": "Zakup LM"},
-        {"code": "SHIPMENT", "label": "Wysyłka z magazynu"},
-        {"code": "CORRECTION", "label": "Korekta"},
-        {"code": "RECLASSIFICATION", "label": "Przeksięgowanie kategorii"},
-        {"code": "INVENTORY", "label": "Inwentaryzacja"},
-    ]

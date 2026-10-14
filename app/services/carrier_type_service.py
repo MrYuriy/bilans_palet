@@ -4,6 +4,9 @@ from uuid import UUID
 from app.core.exc import BadRequestException, ObjectNotFoundException
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
+from app.models.day_closure import DailyBalance
+from app.models.inventory import InventoryLine
+from app.models.movement import MovementLine
 from app.models.user import User
 from app.repositories.carrier_type_repo import CarrierTypeRepository
 from app.services.dictionary_service import DictionaryService
@@ -13,7 +16,11 @@ class CarrierTypeService(DictionaryService[CarrierType]):
     not_found_message = "Nie znaleziono typu nośnika"
     duplicate_message = "Typ nośnika o tej nazwie już istnieje"
     in_use_message = "Typ nośnika występuje w ruchach. Możesz go dezaktywować."
-    used_by = ()
+    used_by = (
+        MovementLine.carrier_type_uuid,
+        InventoryLine.carrier_type_uuid,
+        DailyBalance.carrier_type_uuid,
+    )
     entity = "carrier_type"
 
     repo: CarrierTypeRepository

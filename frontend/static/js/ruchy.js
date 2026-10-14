@@ -1,32 +1,28 @@
 // Rejestr operacji: every movement, filtered and paged, with its details.
 
 const PAGE_SIZE = 50;
-const state = { offset: 0, total: 0, manyTypes: false };
+const state = { offset: 0, total: 0 };
 
 function filters() {
   return {
     date_from: document.getElementById("f-from").value,
     date_to: document.getElementById("f-to").value,
     type: document.getElementById("f-type").value,
-    area_uuid: document.getElementById("f-area").value,
+    carrier_type_uuid: document.getElementById("f-carrier").value,
   };
 }
 
 async function fillFilters() {
-  const [types, palletTypes] = await Promise.all([
+  const [types, carriers] = await Promise.all([
     api("/movements/types"),
-    api("/pallet-types"),
+    api("/carrier-types"),
   ]);
-  state.manyTypes = palletTypes.length > 1;
 
   document.getElementById("f-type").innerHTML += types
     .map((t) => `<option value="${t.code}">${esc(t.label)}</option>`)
     .join("");
-
-  // Operators read only their areas; the others read every area.
-  const areas = App.user.role === "operator" ? App.user.areas : await api("/areas");
-  document.getElementById("f-area").innerHTML += areas
-    .map((a) => `<option value="${a.uuid}">${esc(a.name)}</option>`)
+  document.getElementById("f-carrier").innerHTML += carriers
+    .map((t) => `<option value="${t.uuid}">${esc(t.group.name)} · ${esc(t.name)}</option>`)
     .join("");
 }
 
@@ -45,15 +41,14 @@ async function load() {
   state.total = page.total;
 
   table.innerHTML = page.data.length
-    ? `<thead><tr><th>Data</th><th>Operacja</th><th>Obszar</th><th>Pozycje</th>
+    ? `<thead><tr><th>Data</th><th>Operacja</th><th>Pozycje</th>
          <th>Nr dokumentu</th><th>Użytkownik</th><th>Wprowadzono</th></tr></thead>
        <tbody>${page.data
          .map(
            (m) => `<tr class="click" data-uuid="${m.uuid}">
              <td class="mut">${fmtDate(m.operation_date)}</td>
              <td class="strong">${esc(m.type_label)}</td>
-             <td>${esc(m.area.name)}</td>
-             <td>${linesSummary(m, state.manyTypes)}</td>
+             <td>${linesSummary(m)}</td>
              <td>${esc(m.document_number || "")}</td>
              <td class="mut">${esc(m.user.username)}</td>
              <td class="mut">${fmtDateTime(m.created_at)}</td>
@@ -88,7 +83,6 @@ async function openDetail(uuid) {
   document.getElementById("d-title").textContent = m.type_label;
   document.getElementById("d-fields").innerHTML = [
     field("Data operacji", fmtDate(m.operation_date)),
-    field("Obszar", esc(m.area.name)),
     field("Użytkownik", esc(m.user.username)),
     field("Nr dokumentu", esc(m.document_number || "")),
     field("Wprowadzono", fmtDateTime(m.created_at)),
@@ -96,10 +90,10 @@ async function openDetail(uuid) {
   ].join("");
 
   document.getElementById("d-lines").innerHTML = m.lines.length
-    ? `<thead><tr><th>Typ palety</th><th>Jakość</th><th class="num">Zmiana stanu</th></tr></thead>
+    ? `<thead><tr><th>Typ nośnika</th><th class="num">Zmiana stanu</th></tr></thead>
        <tbody>${m.lines
          .map(
-           (l) => `<tr><td>${esc(l.pallet_type.name)}</td><td>${esc(l.quality.name)}</td>
+           (l) => `<tr><td>${esc(l.carrier_type.name)}</td>
              <td class="num ${l.quantity < 0 ? "neg" : "pos"}">${l.quantity > 0 ? "+" : ""}${fmt(l.quantity)}</td></tr>`
          )
          .join("")}</tbody>`
@@ -109,11 +103,11 @@ async function openDetail(uuid) {
   sheetWrap.classList.toggle("hidden", !m.inventory_lines);
   if (m.inventory_lines) {
     document.getElementById("d-sheet").innerHTML = `
-      <thead><tr><th>Typ palety</th><th>Jakość</th><th class="num">Stan systemowy</th>
+      <thead><tr><th>Typ nośnika</th><th class="num">Stan systemowy</th>
         <th class="num">Policzono</th><th class="num">Różnica</th></tr></thead>
       <tbody>${m.inventory_lines
         .map(
-          (r) => `<tr><td>${esc(r.pallet_type.name)}</td><td>${esc(r.quality.name)}</td>
+          (r) => `<tr><td>${esc(r.carrier_type.name)}</td>
             <td class="num">${fmt(r.system_quantity)}</td><td class="num">${fmt(r.counted_quantity)}</td>
             <td class="num ${r.difference < 0 ? "neg" : r.difference > 0 ? "pos" : "mut"}">${r.difference > 0 ? "+" : ""}${fmt(r.difference)}</td></tr>`
         )

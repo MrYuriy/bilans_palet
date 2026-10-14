@@ -1,5 +1,6 @@
-// Inwentaryzacja: count an area against the system stock and approve it in one
-// step. Only the counted rows change; each becomes exactly what was counted.
+// Inwentaryzacja: count the stock against the system and approve it in one step.
+// Only the counted rows change; each becomes exactly what was counted. The first
+// count enters the starting stock.
 
 const $ = (id) => document.getElementById(id);
 let sheetRows = [];
@@ -23,60 +24,58 @@ function differenceCell(tr, row) {
 }
 
 async function loadSheet() {
-  const area = $("area").value;
-  if (!area) return;
   setMsg($("msg"), "");
-  sheetRows = await api("/inventories/sheet", { query: { area_uuid: area } });
-  $("sheet-sub").textContent = $("area").selectedOptions[0].text;
+  sheetRows = await api("/inventories/sheet");
 
+  let group = null;
   $("sheet").innerHTML = `
-    <thead><tr><th>Typ palety</th><th>Jakość</th><th class="num">Stan systemowy</th>
+    <thead><tr><th>Typ nośnika</th><th class="num">Stan systemowy</th>
       <th class="num">Policzono</th><th class="num">Różnica</th><th class="num">%</th></tr></thead>
     <tbody>${sheetRows
-      .map(
-        (r, i) => `<tr data-i="${i}">
-          <td class="strong">${esc(r.pallet_type.name)}</td>
-          <td>${esc(r.quality.name)}</td>
+      .map((r, i) => {
+        const header =
+          r.group.uuid === group
+            ? ""
+            : `<tr><td colspan="5" class="strong" style="background:#fafbf9">${esc(r.group.name)}</td></tr>`;
+        group = r.group.uuid;
+        return `${header}<tr data-i="${i}">
+          <td class="strong" style="padding-left:24px">${esc(r.carrier_type.name)}</td>
           <td class="num">${fmt(r.system_quantity)}</td>
           <td class="num"><input class="num-in c-count" type="number" min="0" step="1"></td>
           <td class="num c-diff"></td>
           <td class="num c-pct mut"></td>
-        </tr>`
-      )
+        </tr>`;
+      })
       .join("")}</tbody>`;
 
-  $("sheet").querySelectorAll("tbody tr").forEach((tr) => {
+  $("sheet").querySelectorAll("tbody tr[data-i]").forEach((tr) => {
     const row = sheetRows[tr.dataset.i];
     tr.querySelector(".c-count").oninput = () => differenceCell(tr, row);
   });
 }
 
 async function loadHistory() {
-  const area = $("area").value;
-  const counts = await api("/movements", {
-    query: { type: "INVENTORY", area_uuid: area, limit: 10 },
-  });
+  const counts = await api("/movements", { query: { type: "INVENTORY", limit: 10 } });
   $("history").innerHTML = counts.length
-    ? `<thead><tr><th>Data</th><th>Obszar</th><th>Różnice</th><th>Nr dokumentu</th><th>Użytkownik</th></tr></thead>
+    ? `<thead><tr><th>Data</th><th>Różnice</th><th>Nr dokumentu</th><th>Użytkownik</th></tr></thead>
        <tbody>${counts
          .map(
            (m) => `<tr class="click" data-uuid="${m.uuid}">
              <td class="mut">${fmtDate(m.operation_date)}</td>
-             <td>${esc(m.area.name)}</td>
-             <td>${linesSummary(m, false)}</td>
+             <td>${linesSummary(m)}</td>
              <td>${esc(m.document_number || "")}</td>
              <td class="mut">${esc(m.user.username)}</td>
            </tr>`
          )
          .join("")}</tbody>`
-    : `<tbody><tr><td class="empty">Brak spisów w tym obszarze</td></tr></tbody>`;
+    : `<tbody><tr><td class="empty">Brak spisów</td></tr></tbody>`;
   $("history").querySelectorAll("tr.click").forEach((tr) => {
     tr.onclick = () => (location.href = `/app/ruchy?ruch=${tr.dataset.uuid}`);
   });
 }
 
 function countedLines() {
-  return [...$("sheet").querySelectorAll("tbody tr")]
+  return [...$("sheet").querySelectorAll("tbody tr[data-i]")]
     .map((tr) => ({ tr, row: sheetRows[tr.dataset.i], raw: tr.querySelector(".c-count").value }))
     .filter((x) => x.raw !== "")
     .map((x) => ({ ...x, counted: parseInt(x.raw, 10) }));
@@ -96,7 +95,7 @@ async function approve(e) {
   }
   const differences = counted.filter((x) => x.counted !== x.row.system_quantity).length;
   const question =
-    `Zatwierdzić spis obszaru „${$("area").selectedOptions[0].text}”?\n` +
+    "Zatwierdzić spis?\n" +
     `Policzone pozycje: ${counted.length}, z różnicą: ${differences}.\n` +
     "Stan tych pozycji zostanie ustawiony na policzoną ilość.";
   if (!confirm(question)) return;
@@ -106,12 +105,10 @@ async function approve(e) {
     const movement = await api("/inventories", {
       method: "POST",
       body: {
-        area_uuid: $("area").value,
         document_number: $("document").value,
         comment: $("comment").value,
         lines: counted.map((x) => ({
-          pallet_type_uuid: x.row.pallet_type.uuid,
-          quality_uuid: x.row.quality.uuid,
+          carrier_type_uuid: x.row.carrier_type.uuid,
           counted_quantity: x.counted,
         })),
       },
@@ -132,36 +129,15 @@ async function approve(e) {
 
 (async () => {
   await App.ready;
-  if (!App.can("movements")) {
+  if (!App.can("inventory")) {
     document.querySelector(".wrap").innerHTML =
       '<div class="card"><div class="empty">Brak uprawnień do inwentaryzacji</div></div>';
     return;
   }
 
-  const [settings, allAreas] = await Promise.all([
-    api("/settings"),
-    App.user.role === "admin" ? api("/areas", { query: { active: true } }) : Promise.resolve(null),
-  ]);
+  const settings = await api("/settings");
   $("day").textContent = `Spis na dobę: ${fmtDate(settings.current_day)}`;
 
-  const areas = allAreas || App.user.areas;
-  $("area").innerHTML = areas
-    .map((a) => `<option value="${a.uuid}">${esc(a.name)}</option>`)
-    .join("");
-  if (areas.length === 1) {
-    $("area-field").classList.add("hidden");
-    $("area-fixed").textContent = `Obszar: ${areas[0].name}`;
-    $("area-fixed").classList.remove("hidden");
-  } else if (!areas.length) {
-    setMsg($("msg"), "Nie masz przypisanego obszaru — skontaktuj się z administratorem");
-    $("save").disabled = true;
-    return;
-  }
-
-  $("area").onchange = async () => {
-    await loadSheet();
-    await loadHistory();
-  };
   $("count-form").addEventListener("submit", approve);
   await loadSheet();
   await loadHistory();

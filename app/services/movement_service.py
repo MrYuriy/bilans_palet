@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
@@ -9,16 +8,13 @@ from app.core.exc import (
     ForbiddenException,
     ObjectNotFoundException,
 )
-from app.models.area import Area
+from app.models.carrier_type import CarrierType
 from app.models.movement import Movement, MovementLine, MovementType
-from app.models.quality import Quality
 from app.models.user import User
-from app.repositories.area_repo import AreaRepository
+from app.repositories.carrier_type_repo import CarrierTypeRepository
 from app.repositories.movement_repo import MovementRepository
-from app.repositories.pallet_type_repo import PalletTypeRepository
-from app.repositories.quality_repo import QualityRepository
+from app.repositories.stock_lock import StockLock
 from app.schemas.movement import (
-    MOVEMENT_LABELS,
     InventoryLineOut,
     MovementCreate,
     MovementLineIn,
@@ -27,23 +23,16 @@ from app.schemas.movement import (
     UserRef,
 )
 from app.services.day_close_service import ensure_day_open
+from app.services.operation_catalog import OPERATIONS, Operation
 from app.services.permission_service import PermissionService
 from app.services.settings_service import SettingsService
-
-# Movements entered as positive quantities, and the sign they get in the balance.
-SIGNS = {
-    MovementType.RECEIPT: 1,
-    MovementType.LM_PURCHASE: 1,
-    MovementType.SHIPMENT: -1,
-}
 
 
 def movement_out(movement: Movement) -> MovementOut:
     return MovementOut(
         uuid=movement.uuid,
         type=movement.type,
-        type_label=MOVEMENT_LABELS[movement.type],
-        area=movement.area,
+        type_label=OPERATIONS[movement.type].label,
         user=UserRef.model_validate(movement.user),
         operation_date=movement.operation_date,
         document_number=movement.document_number,
@@ -53,8 +42,7 @@ def movement_out(movement: Movement) -> MovementOut:
         inventory_lines=(
             [
                 InventoryLineOut(
-                    pallet_type=row.pallet_type,
-                    quality=row.quality,
+                    carrier_type=row.carrier_type,
                     system_quantity=row.system_quantity,
                     counted_quantity=row.counted_quantity,
                     difference=row.counted_quantity - row.system_quantity,
@@ -75,75 +63,53 @@ class MovementService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repo = MovementRepository(session)
-        self.area_repo = AreaRepository(session)
-        self.pallet_type_repo = PalletTypeRepository(session)
-        self.quality_repo = QualityRepository(session)
+        self.type_repo = CarrierTypeRepository(session)
+        self.lock = StockLock(session)
         self.permissions = PermissionService()
 
-    @staticmethod
-    def types() -> list[MovementTypeOut]:
-        return [MovementTypeOut(code=t, label=MOVEMENT_LABELS[t]) for t in MovementType]
+    def types(self, user: User) -> list[MovementTypeOut]:
+        return [
+            MovementTypeOut(
+                code=op.type,
+                label=op.label,
+                sign=op.sign,
+                note_required=op.note_required,
+                counted_types_only=op.counted_types_only,
+                can_enter=op.type != MovementType.INVENTORY
+                and self.permissions.has_access(user.role.name, op.module),
+            )
+            for op in OPERATIONS.values()
+        ]
+
+    def check_allowed(self, user: User, operation: Operation) -> None:
+        if not self.permissions.has_access(user.role.name, operation.module):
+            raise ForbiddenException("Brak uprawnień")
 
     # ---------- reading ----------
 
-    def _readable_areas(self, user: User) -> list[UUID] | None:
-        """None = every area; otherwise the user's assigned areas."""
-        if self.permissions.reads_every_area(user.role.name):
-            return None
-        return [a.uuid for a in user.areas]
-
     async def search(
         self,
-        user: User,
-        area_uuid: UUID | None = None,
         movement_type: MovementType | None = None,
+        carrier_type_uuid: UUID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[MovementOut], int]:
-        readable = self._readable_areas(user)
-        if area_uuid is not None:
-            if readable is not None and area_uuid not in readable:
-                raise ForbiddenException("Brak dostępu do obszaru")
-            readable = [area_uuid]
-
         rows, total = await self.repo.search(
-            readable, movement_type, date_from, date_to, limit, offset
+            movement_type, carrier_type_uuid, date_from, date_to, limit, offset
         )
         return [movement_out(m) for m in rows], total
 
-    async def get(self, user: User, movement_uuid: UUID) -> MovementOut:
+    async def get(self, movement_uuid: UUID) -> MovementOut:
         movement = await self.repo.get_with_details(movement_uuid)
         if movement is None:
             raise ObjectNotFoundException("Nie znaleziono ruchu")
-        readable = self._readable_areas(user)
-        if readable is not None and movement.area_uuid not in readable:
-            raise ForbiddenException("Brak dostępu do obszaru")
         return movement_out(movement)
 
     # ---------- creating ----------
 
-    async def resolve_area(self, user: User, area_uuid: UUID | None) -> Area:
-        assigned = [a for a in user.areas if a.is_active]
-
-        if area_uuid is None:
-            if len(assigned) == 1:
-                return assigned[0]
-            raise BadRequestException("Wybierz obszar")
-
-        area = await self.area_repo.get_one(uuid=area_uuid)
-        if area is None:
-            raise BadRequestException("Nieznany obszar")
-        if not area.is_active:
-            raise BadRequestException(f"Obszar „{area.name}” jest nieaktywny")
-        if not self.permissions.enters_in_any_area(
-            user.role.name
-        ) and area.uuid not in {a.uuid for a in assigned}:
-            raise ForbiddenException("Brak dostępu do obszaru")
-        return area
-
-    async def _operation_date(self, value: date | None) -> date:
+    async def operation_date(self, value: date | None) -> date:
         """The warehouse day of the movement; today's when left out."""
         today = await SettingsService(self.session).current_day()
         if value is None:
@@ -152,137 +118,99 @@ class MovementService:
             raise BadRequestException("Data operacji nie może być z przyszłości")
         return value
 
+    async def carrier_types(self, uuids: set[UUID]) -> dict[UUID, CarrierType]:
+        """The active carrier types asked for; an unknown or inactive one is refused."""
+        found = {t.uuid: t for t in await self.type_repo.list_all_by_ids(list(uuids))}
+        for type_uuid in uuids:
+            carrier_type = found.get(type_uuid)
+            if carrier_type is None:
+                raise BadRequestException("Nieznany typ nośnika")
+            if not carrier_type.is_active:
+                raise BadRequestException(
+                    f"Typ nośnika „{carrier_type.name}” jest nieaktywny"
+                )
+        return found
+
     async def _lines(
-        self, movement_type: MovementType, lines: list[MovementLineIn]
+        self, operation: Operation, lines: list[MovementLineIn]
     ) -> list[MovementLine]:
         if not lines:
             raise BadRequestException("Dodaj co najmniej jedną pozycję")
 
-        reclassification = movement_type == MovementType.RECLASSIFICATION
-
-        pallet_types = {
-            t.uuid: t
-            for t in await self.pallet_type_repo.list_all_by_ids(
-                list({line.pallet_type_uuid for line in lines})
-            )
-        }
-        quality_uuids = {line.quality_uuid for line in lines} | {
-            line.to_quality_uuid for line in lines if line.to_quality_uuid
-        }
-        qualities = {
-            q.uuid: q
-            for q in await self.quality_repo.list_all_by_ids(list(quality_uuids))
-        }
-
-        def active_quality(quality_uuid: UUID) -> Quality:
-            quality = qualities.get(quality_uuid)
-            if quality is None:
-                raise BadRequestException("Nieznana jakość")
-            if not quality.is_active:
-                raise BadRequestException(f"Jakość „{quality.name}” jest nieaktywna")
-            return quality
+        reclassification = operation.type == MovementType.RECLASSIFICATION
+        types = await self.carrier_types(
+            {line.carrier_type_uuid for line in lines}
+            | {line.to_carrier_type_uuid for line in lines if line.to_carrier_type_uuid}
+        )
 
         result: list[MovementLine] = []
 
-        def add(pallet_type_uuid: UUID, quality_uuid: UUID, quantity: int) -> None:
+        def add(type_uuid: UUID, quantity: int) -> None:
             result.append(
                 MovementLine(
                     position=len(result) + 1,
-                    pallet_type_uuid=pallet_type_uuid,
-                    quality_uuid=quality_uuid,
+                    carrier_type_uuid=type_uuid,
                     quantity=quantity,
                 )
             )
 
         for line in lines:
-            pallet_type = pallet_types.get(line.pallet_type_uuid)
-            if pallet_type is None:
-                raise BadRequestException("Nieznany typ palety")
-            if not pallet_type.is_active:
+            carrier_type = types[line.carrier_type_uuid]
+
+            if line.to_carrier_type_uuid is not None and not reclassification:
+                raise BadRequestException("Typ docelowy dotyczy tylko przeksięgowania")
+
+            if operation.counted_types_only and not carrier_type.count_in_reports:
                 raise BadRequestException(
-                    f"Typ palety „{pallet_type.name}” jest nieaktywny"
+                    f"„{operation.label}” dotyczy tylko typów liczonych w raportach,"
+                    f" nie „{carrier_type.name}”"
                 )
 
-            quality = active_quality(line.quality_uuid)
-
-            if line.to_quality_uuid is not None and not reclassification:
-                raise BadRequestException(
-                    "Jakość docelowa dotyczy tylko przeksięgowania"
-                )
-
-            if movement_type == MovementType.CORRECTION:
+            if operation.type == MovementType.CORRECTION:
                 if line.quantity == 0:
                     raise BadRequestException("Ilość korekty nie może być zerowa")
-                add(pallet_type.uuid, quality.uuid, line.quantity)
+                add(carrier_type.uuid, line.quantity)
                 continue
 
             if line.quantity <= 0:
                 raise BadRequestException("Ilość musi być większa od zera")
 
             if not reclassification:
-                add(
-                    pallet_type.uuid, quality.uuid, SIGNS[movement_type] * line.quantity
-                )
+                add(carrier_type.uuid, operation.sign * line.quantity)
                 continue
 
-            # Re-classification: off the current quality, onto a worse one.
-            if line.to_quality_uuid is None:
-                raise BadRequestException("Podaj jakość docelową przeksięgowania")
-            target = active_quality(line.to_quality_uuid)
-            if target.sort_order <= quality.sort_order:
+            # Re-classification: off one carrier type, onto another, any direction.
+            if line.to_carrier_type_uuid is None:
+                raise BadRequestException("Podaj typ docelowy przeksięgowania")
+            if line.to_carrier_type_uuid == carrier_type.uuid:
                 raise BadRequestException(
-                    "Przeksięgowanie możliwe tylko do gorszej jakości"
+                    "Przeksięgowanie wymaga dwóch różnych typów nośników"
                 )
-            add(pallet_type.uuid, quality.uuid, -line.quantity)
-            add(pallet_type.uuid, target.uuid, line.quantity)
+            add(carrier_type.uuid, -line.quantity)
+            add(line.to_carrier_type_uuid, line.quantity)
 
         return result
 
-    async def _check_stock(self, area: Area, lines: list[MovementLine]) -> None:
-        """Refuse a document that would take any balance of the area below zero."""
-        change: dict[tuple[UUID, UUID], int] = defaultdict(int)
-        for line in lines:
-            change[line.pallet_type_uuid, line.quality_uuid] += line.quantity
-
-        decreasing = {key: delta for key, delta in change.items() if delta < 0}
-
-        # The caller holds the area lock, so two parallel shipments of one area
-        # cannot both see the same stock.
-        for (pallet_type_uuid, quality_uuid), delta in decreasing.items():
-            available = await self.repo.balance(
-                area.uuid, pallet_type_uuid, quality_uuid
-            )
-            if available + delta < 0:
-                pallet_type = await self.pallet_type_repo.get_one(uuid=pallet_type_uuid)
-                quality = await self.quality_repo.get_one(uuid=quality_uuid)
-                raise BadRequestException(
-                    f"Niewystarczająca ilość {pallet_type.name} / {quality.name}"
-                    f" w obszarze „{area.name}”: dostępne {available},"
-                    f" potrzeba {-delta}"
-                )
-
     async def create(self, user: User, data: MovementCreate) -> MovementOut:
-        if data.type == MovementType.INVENTORY:
+        operation = OPERATIONS[data.type]
+        if operation.type == MovementType.INVENTORY:
             raise BadRequestException("Inwentaryzację wprowadza się arkuszem spisu")
+        self.check_allowed(user, operation)
 
-        area = await self.resolve_area(user, data.area_uuid)
-        operation_date = await self._operation_date(data.operation_date)
+        operation_date = await self.operation_date(data.operation_date)
         comment = clean_text(data.comment)
+        if operation.note_required and comment is None:
+            raise BadRequestException(f"„{operation.label}” wymaga notatki")
 
-        if data.type == MovementType.CORRECTION and comment is None:
-            raise BadRequestException("Podaj powód korekty w komentarzu")
+        lines = await self._lines(operation, data.lines)
 
-        lines = await self._lines(data.type, data.lines)
-
-        # From here on the area is locked: a day being closed waits for this
-        # movement, or this movement sees that its day was closed.
-        await self.area_repo.lock(area.uuid)
+        # Held until commit: a day being closed waits for this movement, or this
+        # movement sees that its day was closed.
+        await self.lock.shared()
         await ensure_day_open(self.session, operation_date)
-        await self._check_stock(area, lines)
 
         movement = Movement(
-            type=data.type,
-            area_uuid=area.uuid,
+            type=operation.type,
             user_uuid=user.uuid,
             operation_date=operation_date,
             document_number=clean_text(data.document_number),
@@ -292,8 +220,8 @@ class MovementService:
         self.session.add(movement)
         await self.session.flush()
 
-        # Read it back whole (area, user, line names). Detaching the new object
-        # first makes the read build it fresh; a refresh with populate_existing
-        # would also reset the current user, who is the movement's author.
+        # Read it back whole (user, line names). Detaching the new object first
+        # makes the read build it fresh; a refresh with populate_existing would
+        # also reset the current user, who is the movement's author.
         self.session.expunge(movement)
         return movement_out(await self.repo.get_with_details(movement.uuid))

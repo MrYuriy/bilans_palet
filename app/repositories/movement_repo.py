@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.inventory import InventoryLine
@@ -9,12 +9,9 @@ from app.models.movement import Movement, MovementLine, MovementType
 from app.repositories.base import BaseRepository
 
 _DETAILS = [
-    joinedload(Movement.area),
     joinedload(Movement.user),
-    selectinload(Movement.lines).joinedload(MovementLine.pallet_type),
-    selectinload(Movement.lines).joinedload(MovementLine.quality),
-    selectinload(Movement.inventory_lines).joinedload(InventoryLine.pallet_type),
-    selectinload(Movement.inventory_lines).joinedload(InventoryLine.quality),
+    selectinload(Movement.lines).joinedload(MovementLine.carrier_type),
+    selectinload(Movement.inventory_lines).joinedload(InventoryLine.carrier_type),
 ]
 
 
@@ -27,19 +24,24 @@ class MovementRepository(BaseRepository[Movement]):
 
     async def search(
         self,
-        area_uuids: list[UUID] | None = None,
         movement_type: MovementType | None = None,
+        carrier_type_uuid: UUID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Movement], int]:
-        """Newest first. ``area_uuids=None`` means every area."""
+        """Newest first. A carrier type keeps the movements with a line of it."""
         conditions = []
-        if area_uuids is not None:
-            conditions.append(Movement.area_uuid.in_(area_uuids))
         if movement_type is not None:
             conditions.append(Movement.type == movement_type)
+        if carrier_type_uuid is not None:
+            conditions.append(
+                exists().where(
+                    MovementLine.movement_uuid == Movement.uuid,
+                    MovementLine.carrier_type_uuid == carrier_type_uuid,
+                )
+            )
         if date_from is not None:
             conditions.append(Movement.operation_date >= date_from)
         if date_to is not None:
@@ -58,34 +60,9 @@ class MovementRepository(BaseRepository[Movement]):
         rows = (await self.session.execute(query)).scalars().unique().all()
         return list(rows), (await self.session.execute(total)).scalar_one()
 
-    async def balance(
-        self, area_uuid: UUID, pallet_type_uuid: UUID, quality_uuid: UUID
-    ) -> int:
-        """Current balance of one pallet type and quality in an area."""
-        query = (
-            select(func.coalesce(func.sum(MovementLine.quantity), 0))
-            .join(Movement, MovementLine.movement_uuid == Movement.uuid)
-            .where(
-                Movement.area_uuid == area_uuid,
-                MovementLine.pallet_type_uuid == pallet_type_uuid,
-                MovementLine.quality_uuid == quality_uuid,
-            )
-        )
-        return (await self.session.execute(query)).scalar_one()
-
-    async def balances(self, area_uuid: UUID) -> dict[tuple[UUID, UUID], int]:
-        """Current balance of an area per (pallet type, quality) that has any line."""
-        query = (
-            select(
-                MovementLine.pallet_type_uuid,
-                MovementLine.quality_uuid,
-                func.sum(MovementLine.quantity),
-            )
-            .join(Movement, MovementLine.movement_uuid == Movement.uuid)
-            .where(Movement.area_uuid == area_uuid)
-            .group_by(MovementLine.pallet_type_uuid, MovementLine.quality_uuid)
-        )
-        rows = (await self.session.execute(query)).all()
-        return {
-            (type_uuid, quality_uuid): total for type_uuid, quality_uuid, total in rows
-        }
+    async def balances(self) -> dict[UUID, int]:
+        """Current stock per carrier type that has any line."""
+        query = select(
+            MovementLine.carrier_type_uuid, func.sum(MovementLine.quantity)
+        ).group_by(MovementLine.carrier_type_uuid)
+        return dict((await self.session.execute(query)).all())

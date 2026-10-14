@@ -19,8 +19,10 @@ async def test_login_returns_token_and_user(client, session):
     assert body["user"]["role"] == "admin"
     assert body["user"]["permissions"] == [
         "audit",
+        "inventory",
         "masterdata",
-        "movements",
+        "operations",
+        "reclassification",
         "settings",
         "users",
     ]
@@ -72,7 +74,7 @@ async def test_me_returns_the_current_user(client, session):
     body = response.json()
     assert body["username"] == "jan"
     assert body["role"] == "operator"
-    assert body["permissions"] == ["movements"]
+    assert body["permissions"] == ["inventory", "operations", "reclassification"]
     assert body["must_change_password"] is True
 
 

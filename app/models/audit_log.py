@@ -30,7 +30,7 @@ class AuditLog(BaseModel, UUIDMixin, TimestampMixin):
     username = Column(String(100), nullable=False)
 
     action = Column(String(20), nullable=False)  # create / update / delete
-    entity = Column(String(50), nullable=False, index=True)  # user, area, ...
+    entity = Column(String(50), nullable=False, index=True)  # user, carrier_type, ...
     # No foreign key: the row may be deleted later, the entry stays.
     entity_uuid = Column(UUID(as_uuid=True), nullable=False, index=True)
     entity_name = Column(String(255), nullable=False)

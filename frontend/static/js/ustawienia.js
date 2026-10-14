@@ -20,23 +20,6 @@ const DICTS = {
     grouped: true,
     counted: true,
   },
-  areas: {
-    url: "/areas",
-    title: "Obszary",
-    hint: "Każdy obszar ma własny stan palet. Obszar użyty w ruchach można tylko dezaktywować.",
-  },
-  "pallet-types": {
-    url: "/pallet-types",
-    title: "Typy palet",
-    hint: "Typ użyty w ruchach można tylko dezaktywować.",
-  },
-  qualities: {
-    url: "/qualities",
-    title: "Jakości",
-    hint: "Kolejność: 1 = najlepsza. Przeksięgowanie jest możliwe tylko do gorszej jakości.",
-    ordered: true,
-    orderMin: 1,
-  },
 };
 
 // ---------- tabs ----------
@@ -204,22 +187,20 @@ $("dict-form").addEventListener("submit", async (e) => {
 // ---------- users ----------
 
 let roles = [];
-let allAreas = [];
-let lookups = null; // Promise of [roles, areas], reloaded each time the tab opens
+let lookups = null; // Promise of the roles, reloaded each time the tab opens
 let editedUser = null; // null = creating a new user
 
 async function loadUsers() {
-  lookups = Promise.all([api("/roles"), api("/areas")]);
+  lookups = api("/roles");
   const [users] = await Promise.all([api("/users"), lookups]);
-  [roles, allAreas] = await lookups;
+  roles = await lookups;
   $("users-table").innerHTML = `
-    <thead><tr><th>Login</th><th>Rola</th><th>Obszary</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Login</th><th>Rola</th><th>Status</th><th></th></tr></thead>
     <tbody>${users
       .map(
         (u) => `<tr data-uuid="${u.uuid}">
           <td class="strong">${esc(u.username)}</td>
           <td>${esc(ROLE_LABELS[u.role] || u.role)}</td>
-          <td>${u.areas.length ? u.areas.map((a) => esc(a.name)).join(", ") : '<span class="mut">—</span>'}</td>
           <td class="row">
             ${u.is_active ? '<span class="bg ok">Aktywny</span>' : '<span class="bg nu">Nieaktywny</span>'}
             ${u.must_change_password ? '<span class="bg wr">Zmiana hasła</span>' : ""}
@@ -249,8 +230,8 @@ async function loadUsers() {
 }
 
 async function openUser(user) {
-  // Roles and areas may still be loading when the button is clicked.
-  [roles, allAreas] = await lookups;
+  // The roles may still be loading when the button is clicked.
+  roles = await lookups;
   editedUser = user;
   const creating = !user;
   $("user-title").textContent = creating ? "Nowy użytkownik" : `Edycja: ${user.username}`;
@@ -267,15 +248,6 @@ async function openUser(user) {
   $("u-active").checked = creating ? true : user.is_active;
   $("u-active").closest("label").classList.toggle("hidden", creating);
 
-  const assigned = new Set((user ? user.areas : []).map((a) => a.uuid));
-  $("u-areas").innerHTML = allAreas
-    .filter((a) => a.is_active || assigned.has(a.uuid))
-    .map(
-      (a) => `<button type="button" class="chip ${assigned.has(a.uuid) ? "on" : ""}" data-uuid="${a.uuid}">${esc(a.name)}</button>`
-    )
-    .join("");
-  $("u-areas").querySelectorAll(".chip").forEach((c) => (c.onclick = () => c.classList.toggle("on")));
-
   setMsg($("user-msg"), "");
   $("user-dialog").showModal();
 }
@@ -285,12 +257,10 @@ $("user-cancel").onclick = () => $("user-dialog").close();
 
 $("user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const areas = [...$("u-areas").querySelectorAll(".chip.on")].map((c) => c.dataset.uuid);
   const body = {
     username: $("u-name").value,
     role: $("u-role").value,
     must_change_password: $("u-must").checked,
-    areas,
   };
   if ($("u-password").value) body.password = $("u-password").value;
   try {

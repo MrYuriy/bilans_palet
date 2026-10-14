@@ -27,15 +27,9 @@ class InventoryLine(BaseModel, UUIDMixin, TimestampMixin):
         index=True,
     )
     position = Column(Integer, nullable=False)
-    pallet_type_uuid = Column(
+    carrier_type_uuid = Column(
         UUID(as_uuid=True),
-        ForeignKey("pallet_types.uuid", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
-    quality_uuid = Column(
-        UUID(as_uuid=True),
-        ForeignKey("qualities.uuid", ondelete="RESTRICT"),
+        ForeignKey("carrier_types.uuid", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -44,5 +38,4 @@ class InventoryLine(BaseModel, UUIDMixin, TimestampMixin):
     counted_quantity = Column(Integer, nullable=False)
 
     movement = relationship("Movement", back_populates="inventory_lines")
-    pallet_type = relationship("PalletType")
-    quality = relationship("Quality")
+    carrier_type = relationship("CarrierType")

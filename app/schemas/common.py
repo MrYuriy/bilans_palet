@@ -10,7 +10,7 @@ class ActionResult(BaseModel):
 
 
 class NamedRef(BaseModel):
-    """A dictionary row (area, pallet type, quality) shown inside another object."""
+    """A dictionary row (carrier group or type) shown inside another object."""
 
     uuid: UUID
     name: str

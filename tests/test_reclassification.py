@@ -1,151 +1,113 @@
-"""Przeksięgowanie kategorii: pallets move to a worse quality only."""
-
-from uuid import uuid4
+"""Re-classification (przeksięgowanie): a quantity moves from one carrier type
+to another, in any direction."""
 
 import pytest
 
-from app.models.area import Area
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
+from tests.conftest import line, login, make_user, move
 
 
-@pytest.fixture
-async def ids(session) -> dict[str, str]:
-    rows = {
-        "area": Area(name="Przyjęcia 445"),
-        "eur": PalletType(name="EUR"),
-        "I": Quality(name="I", sort_order=1),
-        "II": Quality(name="II", sort_order=2),
-        "III": Quality(name="III", sort_order=3),
-        "old": Quality(name="Stara", sort_order=9, is_active=False),
-    }
-    session.add_all(rows.values())
-    await session.commit()
-    return {key: str(row.uuid) for key, row in rows.items()}
-
-
-@pytest.fixture
-async def stocked(client, admin_headers, ids):
-    """100 EUR pallets of each quality in the area, so there is something to move."""
-    response = await client.post(
-        "/movements",
-        headers=admin_headers,
-        json={
-            "type": "RECEIPT",
-            "area_uuid": ids["area"],
-            "lines": [
-                {
-                    "pallet_type_uuid": ids["eur"],
-                    "quality_uuid": ids[q],
-                    "quantity": 100,
-                }
-                for q in ("I", "II", "III")
-            ],
-        },
-    )
-    assert response.status_code == 200, response.text
-
-
-async def reclassify(client, headers, ids, lines):
-    return await client.post(
-        "/movements",
-        headers=headers,
-        json={"type": "RECLASSIFICATION", "area_uuid": ids["area"], "lines": lines},
-    )
-
-
-def move(ids, quantity, source, target):
+async def stock(client, headers) -> dict[str, int]:
+    body = (await client.get("/balances/current", headers=headers)).json()
     return {
-        "pallet_type_uuid": ids["eur"],
-        "quality_uuid": ids[source],
-        "to_quality_uuid": ids.get(target, target),
-        "quantity": quantity,
-    }
-
-
-def lines_of(response):
-    return [(ln["quality"]["name"], ln["quantity"]) for ln in response.json()["lines"]]
-
-
-@pytest.mark.parametrize(
-    ("source", "target"), [("I", "II"), ("I", "III"), ("II", "III")]
-)
-async def test_moves_to_a_worse_quality(
-    client, admin_headers, ids, stocked, source, target
-):
-    response = await reclassify(
-        client, admin_headers, ids, [move(ids, 50, source, target)]
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["type_label"] == "Przeksięgowanie kategorii"
-    assert lines_of(response) == [(source, -50), (target, 50)]
-
-
-async def test_several_moves_in_one_document(client, admin_headers, ids, stocked):
-    response = await reclassify(
-        client,
-        admin_headers,
-        ids,
-        [move(ids, 50, "I", "II"), move(ids, 8, "II", "III")],
-    )
-
-    assert lines_of(response) == [("I", -50), ("II", 50), ("II", -8), ("III", 8)]
-
-
-@pytest.mark.parametrize(("source", "target"), [("II", "I"), ("III", "II"), ("I", "I")])
-async def test_never_to_a_better_or_the_same_quality(
-    client, admin_headers, ids, source, target
-):
-    response = await reclassify(
-        client, admin_headers, ids, [move(ids, 5, source, target)]
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {
-        "message": "Przeksięgowanie możliwe tylko do gorszej jakości"
+        r["carrier_type"]["name"]: r["quantity"]
+        for group in body["groups"]
+        for r in group["rows"]
     }
 
 
 @pytest.mark.parametrize(
-    ("target", "message"),
+    ("source", "target"),
     [
-        (None, "Podaj jakość docelową przeksięgowania"),
-        (str(uuid4()), "Nieznana jakość"),
-        ("old", "Jakość „Stara” jest nieaktywna"),
+        ("euro", "damaged"),  # damaged in the yard
+        ("damaged", "euro"),  # back after repair
+        ("euro", "single"),  # across groups
+        ("single", "scrap"),
     ],
 )
-async def test_target_quality_must_be_valid(
-    client, admin_headers, ids, target, message
+async def test_any_direction_moves_the_quantity(
+    client, admin_headers, carriers, source, target
 ):
-    response = await reclassify(client, admin_headers, ids, [move(ids, 5, "I", target)])
-
-    assert response.status_code == 400
-    assert response.json() == {"message": message}
-
-
-@pytest.mark.parametrize("quantity", [0, -5])
-async def test_quantity_must_be_positive(client, admin_headers, ids, quantity):
-    response = await reclassify(
-        client, admin_headers, ids, [move(ids, quantity, "I", "II")]
+    response = await move(
+        client,
+        admin_headers,
+        "RECLASSIFICATION",
+        line(getattr(carriers, source), 10, to=getattr(carriers, target)),
     )
 
-    assert response.status_code == 400
-    assert response.json() == {"message": "Ilość musi być większa od zera"}
+    assert response.status_code == 200, response.text
+    assert [
+        (ln["carrier_type"]["uuid"], ln["quantity"]) for ln in response.json()["lines"]
+    ] == [(getattr(carriers, source), -10), (getattr(carriers, target), 10)]
 
 
-async def test_target_quality_only_on_a_reclassification(client, admin_headers, ids):
-    response = await client.post(
-        "/movements",
-        headers=admin_headers,
-        json={
-            "type": "RECEIPT",
-            "area_uuid": ids["area"],
-            "lines": [move(ids, 5, "I", "II")],
-        },
+async def test_the_total_stock_does_not_change(client, admin_headers, carriers):
+    await move(client, admin_headers, "OTHER_RECEIPT", line(carriers.euro, 50))
+
+    await move(
+        client,
+        admin_headers,
+        "RECLASSIFICATION",
+        line(carriers.euro, 20, to=carriers.damaged),
+    )
+
+    current = await stock(client, admin_headers)
+    assert (current["EURO"], current["EURO uszkodzone"]) == (30, 20)
+
+
+async def test_not_onto_the_same_type(client, admin_headers, carriers):
+    response = await move(
+        client,
+        admin_headers,
+        "RECLASSIFICATION",
+        line(carriers.euro, 10, to=carriers.euro),
     )
 
     assert response.status_code == 400
     assert response.json() == {
-        "message": "Jakość docelowa dotyczy tylko przeksięgowania"
+        "message": "Przeksięgowanie wymaga dwóch różnych typów nośników"
     }
+
+
+async def test_a_target_is_required(client, admin_headers, carriers):
+    response = await move(
+        client, admin_headers, "RECLASSIFICATION", line(carriers.euro, 10)
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "Podaj typ docelowy przeksięgowania"}
+
+
+async def test_an_inactive_target_is_refused(client, admin_headers, carriers):
+    response = await move(
+        client,
+        admin_headers,
+        "RECLASSIFICATION",
+        line(carriers.euro, 10, to=carriers.inactive),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "Typ nośnika „CHEP” jest nieaktywny"}
+
+
+async def test_a_note_is_required(client, admin_headers, carriers):
+    response = await move(
+        client,
+        admin_headers,
+        "RECLASSIFICATION",
+        line(carriers.euro, 10, to=carriers.damaged),
+        comment=None,
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "„Przeksięgowanie” wymaga notatki"}
+
+
+async def test_a_viewer_cannot_reclassify(client, session, carriers):
+    await make_user(session, "jan", role="viewer")
+    headers = await login(client, "jan")
+
+    response = await move(
+        client, headers, "RECLASSIFICATION", line(carriers.euro, 1, to=carriers.damaged)
+    )
+
+    assert response.status_code == 403

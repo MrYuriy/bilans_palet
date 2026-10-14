@@ -1,77 +1,43 @@
 """Balances: what is in stock now, and per warehouse day (closed or live)."""
 
 from datetime import timedelta
-from uuid import UUID
 
 import pytest
-from sqlalchemy import insert
 
-from app.models.area import Area
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
-from app.models.user_area import user_areas
 from app.services.day_close_service import DayCloseService
-from tests.conftest import login, make_user, warehouse_today
+from tests.conftest import line, login, make_user, move, warehouse_today
 
 TODAY = warehouse_today()
 YESTERDAY = TODAY - timedelta(days=1)
 
 
 @pytest.fixture
-async def ids(session) -> dict[str, str]:
-    rows = {
-        "a": Area(name="Przyjęcia 445"),
-        "b": Area(name="Wysyłka 445"),
-        "eur": PalletType(name="EUR"),
-        "I": Quality(name="I", sort_order=1),
-        "II": Quality(name="II", sort_order=2),
-    }
-    session.add_all(rows.values())
-    await session.commit()
-    return {key: str(row.uuid) for key, row in rows.items()}
-
-
-async def move(client, headers, ids, kind, quantity, day, area="a", q="I", to=None):
-    line = {
-        "pallet_type_uuid": ids["eur"],
-        "quality_uuid": ids[q],
-        "quantity": quantity,
-    }
-    if to:
-        line["to_quality_uuid"] = ids[to]
-    response = await client.post(
-        "/movements",
-        headers=headers,
-        json={
-            "type": kind,
-            "area_uuid": ids[area],
-            "operation_date": day.isoformat(),
-            "comment": "test",
-            "lines": [line],
-        },
+async def history(client, admin_headers, carriers):
+    """Yesterday: 100 EURO in, 30 out to ECOM, 10 EURO -> uszkodzone, 8 single in,
+    a correction of -2 EURO. Today: 5 more EURO in."""
+    for kind, ln in [
+        ("PRODUCER_RECEIPT", line(carriers.euro, 100)),
+        ("ECOM_TRANSFER", line(carriers.euro, 30)),
+        ("RECLASSIFICATION", line(carriers.euro, 10, to=carriers.damaged)),
+        ("OTHER_RECEIPT", line(carriers.single, 8)),
+        ("CORRECTION", line(carriers.euro, -2)),
+    ]:
+        response = await move(client, admin_headers, kind, ln, day=YESTERDAY)
+        assert response.status_code == 200, response.text
+    response = await move(
+        client, admin_headers, "PRODUCER_RECEIPT", line(carriers.euro, 5), day=TODAY
     )
     assert response.status_code == 200, response.text
 
 
-@pytest.fixture
-async def history(client, admin_headers, ids):
-    """Yesterday: 100 I in, 30 out, 10 I->II in area a; 7 I in area b.
-    Today: 5 more I into area a."""
-    await move(client, admin_headers, ids, "RECEIPT", 100, YESTERDAY)
-    await move(client, admin_headers, ids, "SHIPMENT", 30, YESTERDAY)
-    await move(client, admin_headers, ids, "RECLASSIFICATION", 10, YESTERDAY, to="II")
-    await move(client, admin_headers, ids, "RECEIPT", 7, YESTERDAY, area="b")
-    await move(client, admin_headers, ids, "RECEIPT", 5, TODAY)
+def stock(group):
+    return [(r["carrier_type"]["name"], r["quantity"]) for r in group["rows"]]
 
 
-def stock(rows):
-    return [(r["quality"]["name"], r["quantity"]) for r in rows]
-
-
-def day_rows(rows):
+def day_rows(group):
     return [
         (
-            r["quality"]["name"],
+            r["carrier_type"]["name"],
             r["opening"],
             r["receipts"],
             r["shipments"],
@@ -79,81 +45,86 @@ def day_rows(rows):
             r["reclassifications"],
             r["closing"],
         )
-        for r in rows
+        for r in group["rows"]
     ]
 
 
-async def operator(client, session, *area_uuids, role="operator"):
-    user = await make_user(session, "jan", role=role)
-    if area_uuids:
-        await session.execute(
-            insert(user_areas),
-            [{"user_uuid": user.uuid, "area_uuid": UUID(a)} for a in area_uuids],
-        )
-        await session.commit()
-    return await login(client, "jan")
+def totals(group):
+    t = group["total"]
+    return (
+        t["opening"],
+        t["receipts"],
+        t["shipments"],
+        t["corrections"],
+        t["reclassifications"],
+        t["closing"],
+    )
 
 
 # ---------- now ----------
 
 
-async def test_current_stock_per_area_and_in_total(client, admin_headers, history):
+async def test_current_stock_per_group_and_type(client, admin_headers, history):
     response = await client.get("/balances/current", headers=admin_headers)
 
-    body = response.json()
-    assert [a["area"]["name"] for a in body["areas"]] == [
-        "Przyjęcia 445",
-        "Wysyłka 445",
+    eur, single = response.json()["groups"]
+    assert eur["group"]["name"] == "EUR"
+    assert stock(eur) == [
+        ("EURO", 63),
+        ("EURO uszkodzone", 10),
+        ("EURO utylizacja", 0),
     ]
-    assert stock(body["areas"][0]["rows"]) == [("I", 65), ("II", 10)]
-    assert stock(body["areas"][1]["rows"]) == [("I", 7), ("II", 0)]
-    assert stock(body["total"]) == [("I", 72), ("II", 10)]
+    # Only the types counted in reports make the group's total.
+    assert eur["total"] == 63
+    assert (stock(single), single["total"]) == ([("Jednorazowe", 8)], 8)
 
 
-async def test_current_stock_shows_empty_areas_with_zeros(client, admin_headers, ids):
+async def test_the_report_flag_comes_with_each_type(client, admin_headers, history):
     response = await client.get("/balances/current", headers=admin_headers)
 
-    body = response.json()
-    assert [stock(a["rows"]) for a in body["areas"]] == [[("I", 0), ("II", 0)]] * 2
-    assert stock(body["total"]) == [("I", 0), ("II", 0)]
+    eur = response.json()["groups"][0]
+    assert [r["carrier_type"]["count_in_reports"] for r in eur["rows"]] == [
+        True,
+        False,
+        False,
+    ]
 
 
-async def test_an_inactive_quality_with_stock_is_still_shown(
-    client, admin_headers, ids, history
+async def test_an_empty_stock_shows_zeros(client, admin_headers, carriers):
+    response = await client.get("/balances/current", headers=admin_headers)
+
+    assert [(stock(g), g["total"]) for g in response.json()["groups"]] == [
+        ([("EURO", 0), ("EURO uszkodzone", 0), ("EURO utylizacja", 0)], 0),
+        ([("Jednorazowe", 0)], 0),
+    ]
+
+
+async def test_an_inactive_type_shows_only_while_it_holds_stock(
+    client, admin_headers, carriers, history
 ):
-    await client.put(
-        f"/qualities/{ids['II']}", headers=admin_headers, json={"is_active": False}
-    )
+    for type_uuid in (carriers.damaged, carriers.scrap):
+        await client.put(
+            f"/carrier-types/{type_uuid}",
+            headers=admin_headers,
+            json={"is_active": False},
+        )
 
-    response = await client.get(
-        "/balances/current", headers=admin_headers, params={"area_uuid": ids["b"]}
-    )
+    response = await client.get("/balances/current", headers=admin_headers)
 
-    # Area b has no II, so the inactive II disappears there; area a keeps it.
-    assert stock(response.json()["areas"][0]["rows"]) == [("I", 7)]
-    whole = await client.get("/balances/current", headers=admin_headers)
-    assert stock(whole.json()["areas"][0]["rows"]) == [("I", 65), ("II", 10)]
-
-
-async def test_operator_sees_only_their_areas(client, session, ids, history):
-    headers = await operator(client, session, ids["b"])
-
-    mine = await client.get("/balances/current", headers=headers)
-    foreign = await client.get(
-        "/balances/current", headers=headers, params={"area_uuid": ids["a"]}
-    )
-
-    assert [a["area"]["name"] for a in mine.json()["areas"]] == ["Wysyłka 445"]
-    assert stock(mine.json()["total"]) == [("I", 7), ("II", 0)]
-    assert foreign.status_code == 403
+    # uszkodzone still holds 10, utylizacja holds nothing.
+    assert stock(response.json()["groups"][0]) == [
+        ("EURO", 63),
+        ("EURO uszkodzone", 10),
+    ]
 
 
-async def test_viewer_sees_everything(client, session, ids, history):
-    headers = await operator(client, session, role="viewer")
+async def test_a_viewer_sees_the_stock(client, session, history):
+    await make_user(session, "jan", role="viewer")
+    headers = await login(client, "jan")
 
     response = await client.get("/balances/current", headers=headers)
 
-    assert stock(response.json()["total"]) == [("I", 72), ("II", 10)]
+    assert response.json()["groups"][0]["total"] == 63
 
 
 # ---------- per day ----------
@@ -171,16 +142,15 @@ async def test_a_closed_day_shows_its_stored_balance(
     body = response.json()
     assert (body["day"], body["closed"]) == (YESTERDAY.isoformat(), True)
     assert body["closed_at"] is not None
-    # (quality, opening, receipts, shipments, corrections, reclassifications, closing)
-    assert day_rows(body["areas"][0]["rows"]) == [
-        ("I", 0, 100, 30, 0, -10, 60),
-        ("II", 0, 0, 0, 0, 10, 10),
+    eur, single = body["groups"]
+    # (type, opening, receipts, shipments, corrections, reclassifications, closing)
+    assert day_rows(eur) == [
+        ("EURO", 0, 100, 30, -2, -10, 58),
+        ("EURO uszkodzone", 0, 0, 0, 0, 10, 10),
+        ("EURO utylizacja", 0, 0, 0, 0, 0, 0),
     ]
-    assert day_rows(body["areas"][1]["rows"]) == [("I", 0, 7, 0, 0, 0, 7)]
-    assert day_rows(body["total"]) == [
-        ("I", 0, 107, 30, 0, -10, 67),
-        ("II", 0, 0, 0, 0, 10, 10),
-    ]
+    assert totals(eur) == (0, 100, 30, -2, -10, 58)
+    assert day_rows(single) == [("Jednorazowe", 0, 8, 0, 0, 0, 8)]
 
 
 async def test_without_a_day_the_last_closed_one_is_shown(
@@ -205,23 +175,23 @@ async def test_the_open_day_is_a_live_preview(client, session, admin_headers, hi
 
     body = response.json()
     assert (body["closed"], body["closed_at"]) == (False, None)
-    assert day_rows(body["areas"][0]["rows"]) == [
-        ("I", 60, 5, 0, 0, 0, 65),
-        ("II", 10, 0, 0, 0, 0, 10),
+    assert day_rows(body["groups"][0])[:2] == [
+        ("EURO", 58, 5, 0, 0, 0, 63),
+        ("EURO uszkodzone", 10, 0, 0, 0, 0, 10),
     ]
 
 
 async def test_closed_numbers_do_not_follow_later_movements(
-    client, session, admin_headers, ids, history
+    client, session, admin_headers, carriers, history
 ):
     await DayCloseService(session).close_due_days()
-    await move(client, admin_headers, ids, "SHIPMENT", 20, TODAY)
+    await move(client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 20))
 
     response = await client.get(
         "/balances/daily", headers=admin_headers, params={"day": YESTERDAY.isoformat()}
     )
 
-    assert day_rows(response.json()["total"])[0] == ("I", 0, 107, 30, 0, -10, 67)
+    assert totals(response.json()["groups"][0]) == (0, 100, 30, -2, -10, 58)
 
 
 async def test_without_any_closed_day_today_is_shown(client, admin_headers, history):
@@ -233,7 +203,7 @@ async def test_without_any_closed_day_today_is_shown(client, admin_headers, hist
     )
 
 
-async def test_a_future_day_is_refused(client, admin_headers, ids):
+async def test_a_future_day_is_refused(client, admin_headers, carriers):
     response = await client.get(
         "/balances/daily",
         headers=admin_headers,
@@ -242,17 +212,3 @@ async def test_a_future_day_is_refused(client, admin_headers, ids):
 
     assert response.status_code == 400
     assert response.json() == {"message": "Ta doba jeszcze się nie zaczęła"}
-
-
-async def test_operator_daily_balance_is_limited_to_their_areas(
-    client, session, ids, history
-):
-    headers = await operator(client, session, ids["b"])
-
-    response = await client.get(
-        "/balances/daily", headers=headers, params={"day": YESTERDAY.isoformat()}
-    )
-
-    body = response.json()
-    assert [a["area"]["name"] for a in body["areas"]] == ["Wysyłka 445"]
-    assert day_rows(body["total"]) == [("I", 0, 7, 0, 0, 0, 7)]

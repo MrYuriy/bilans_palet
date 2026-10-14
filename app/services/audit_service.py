@@ -14,6 +14,7 @@ ACTION_LABELS = {
 }
 ENTITY_LABELS = {
     "user": "Użytkownik",
+    # Areas, pallet types and qualities are gone; older entries still show.
     "area": "Obszar",
     "pallet_type": "Typ palety",
     "quality": "Jakość",

@@ -19,11 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
-from app.models.area import Area
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
 from app.models.role import Role
 from app.models.user import User
 
@@ -41,17 +38,6 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 # Starting dictionaries (names as given by the manager); the admin edits them later.
-AREAS = [
-    "Przyjęcia 445",
-    "Przyjęcia Ecom",
-    "Zwrot 445",
-    "Zwroty Ecom",
-    "Wysyłka 445",
-    "Wysyłka Ecom",
-    "Inwentaryzacja",
-]
-PALLET_TYPES = ["EUR"]
-QUALITIES = [("I", 1), ("II", 2), ("III", 3)]
 # group -> [(type, counted in reports)], in the order shown in lists.
 CARRIERS = {
     "EUR": [
@@ -76,18 +62,6 @@ async def seed_dictionaries(session: AsyncSession) -> list[str]:
     Returns the names of the dictionaries that were filled.
     """
     filled = []
-
-    if await _is_empty(session, Area):
-        session.add_all(Area(name=name) for name in AREAS)
-        filled.append("areas")
-
-    if await _is_empty(session, PalletType):
-        session.add_all(PalletType(name=name) for name in PALLET_TYPES)
-        filled.append("pallet types")
-
-    if await _is_empty(session, Quality):
-        session.add_all(Quality(name=n, sort_order=o) for n, o in QUALITIES)
-        filled.append("qualities")
 
     if await _is_empty(session, CarrierGroup):
         for group_name, types in CARRIERS.items():

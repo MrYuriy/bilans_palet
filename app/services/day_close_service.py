@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exc import BadRequestException
 from app.core.timeutils import business_date, local_now
 from app.models.day_closure import DailyBalance, DayClosure
-from app.repositories.area_repo import AreaRepository
 from app.repositories.balance_repo import BalanceRepository
+from app.repositories.stock_lock import StockLock
+from app.services.day_balance import compute_day
 from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
@@ -26,27 +27,20 @@ class DayCloseService:
         self.session = session
         self.settings = SettingsService(session)
         self.balances = BalanceRepository(session)
-        self.area_repo = AreaRepository(session)
+        self.lock = StockLock(session)
 
     async def close_day(self, day: date) -> None:
         """Close one day and store its balance (the caller commits)."""
-        # Movements lock their area before checking the day is open, so with
-        # every area held no movement of this day is still being written.
-        await self.area_repo.lock_all()
+        # Movements hold the lock shared while they check the day is open, so
+        # with it held exclusively no movement of this day is still being written.
+        await self.lock.exclusive()
         self.session.add(DayClosure(business_date=day))
-        for row in await self.balances.compute_day(day):
+        for row in await compute_day(self.session, day):
             self.session.add(
                 DailyBalance(
                     business_date=day,
-                    area_uuid=row.area_uuid,
-                    pallet_type_uuid=row.pallet_type_uuid,
-                    quality_uuid=row.quality_uuid,
-                    opening=row.opening,
-                    receipts=row.receipts,
-                    shipments=row.shipments,
-                    corrections=row.corrections,
-                    reclassifications=row.reclassifications,
-                    closing=row.closing,
+                    carrier_type_uuid=row.carrier_type_uuid,
+                    **row.values(),
                 )
             )
         await self.session.flush()
@@ -80,7 +74,7 @@ class DayCloseService:
 
 
 async def ensure_day_open(session: AsyncSession, day: date) -> None:
-    """Refuse a change dated on a closed day. Call it with the area locked."""
+    """Refuse a change dated on a closed day. Call it with the stock lock held."""
     last_closed = await SettingsService(session).last_closed_day()
     if last_closed is not None and day <= last_closed:
         raise BadRequestException(f"Doba {day.strftime('%d.%m.%Y')} jest już zamknięta")

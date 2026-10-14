@@ -1,336 +1,169 @@
-"""Stock counts (inwentaryzacja): today, one step, partial, with the sheet kept."""
-
-from uuid import UUID, uuid4
+"""Stock counts (inwentaryzacja), also the starting stock: the count sheet,
+the difference, and what stays in the history."""
 
 import pytest
-from sqlalchemy import insert
 
-from app.models.area import Area
-from app.models.pallet_type import PalletType
-from app.models.quality import Quality
-from app.models.user_area import user_areas
-from tests.conftest import login, make_user, warehouse_today
+from tests.conftest import line, login, make_user, move, warehouse_today
 
 
-@pytest.fixture
-async def ids(session) -> dict[str, str]:
-    rows = {
-        "a": Area(name="Przyjęcia 445"),
-        "b": Area(name="Wysyłka 445"),
-        "eur": PalletType(name="EUR"),
-        "chep": PalletType(name="CHEP", is_active=False),
-        "I": Quality(name="I", sort_order=1),
-        "II": Quality(name="II", sort_order=2),
-        "old": Quality(name="Stara", sort_order=9, is_active=False),
+def counted(carrier_type: str, quantity: int) -> dict:
+    return {"carrier_type_uuid": carrier_type, "counted_quantity": quantity}
+
+
+async def count(client, headers, *lines, **fields):
+    return await client.post(
+        "/inventories", headers=headers, json={"lines": list(lines), **fields}
+    )
+
+
+async def stock(client, headers) -> dict[str, int]:
+    body = (await client.get("/balances/current", headers=headers)).json()
+    return {
+        r["carrier_type"]["name"]: r["quantity"]
+        for group in body["groups"]
+        for r in group["rows"]
     }
-    session.add_all(rows.values())
-    await session.commit()
-    return {key: str(row.uuid) for key, row in rows.items()}
 
 
-async def receive(client, headers, ids, quantity, quality="I", area="a"):
-    response = await client.post(
-        "/movements",
-        headers=headers,
-        json={
-            "type": "RECEIPT",
-            "area_uuid": ids[area],
-            "lines": [
-                {
-                    "pallet_type_uuid": ids["eur"],
-                    "quality_uuid": ids[quality],
-                    "quantity": quantity,
-                }
-            ],
-        },
+async def receive(client, headers, carrier_type: str, quantity: int):
+    response = await move(
+        client, headers, "OTHER_RECEIPT", line(carrier_type, quantity)
     )
     assert response.status_code == 200, response.text
 
 
-def counted(ids, quantity, quality="I", pallet_type="eur"):
-    return {
-        "pallet_type_uuid": ids.get(pallet_type, pallet_type),
-        "quality_uuid": ids.get(quality, quality),
-        "counted_quantity": quantity,
-    }
-
-
-async def count(client, headers, ids, *lines, area="a", **extra):
-    return await client.post(
-        "/inventories",
-        headers=headers,
-        json={"area_uuid": ids[area], "lines": list(lines), **extra},
-    )
-
-
-def sheet_of(response):
-    return [
-        (
-            row["quality"]["name"],
-            row["system_quantity"],
-            row["counted_quantity"],
-            row["difference"],
-        )
-        for row in response.json()["inventory_lines"]
-    ]
-
-
-def lines_of(response):
-    return [(ln["quality"]["name"], ln["quantity"]) for ln in response.json()["lines"]]
-
-
-# ---------- the count ----------
-
-
-async def test_a_shortage_is_written_as_a_minus(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100)
+async def test_a_shortage_is_written_as_a_minus(client, admin_headers, carriers):
+    await receive(client, admin_headers, carriers.euro, 100)
 
     response = await count(
-        client, admin_headers, ids, counted(ids, 90), comment="spis kwartalny"
+        client, admin_headers, counted(carriers.euro, 96), document_number=" SP/1 "
     )
 
     assert response.status_code == 200, response.text
     body = response.json()
     assert (body["type"], body["type_label"]) == ("INVENTORY", "Inwentaryzacja")
     assert body["operation_date"] == warehouse_today().isoformat()
-    assert body["comment"] == "spis kwartalny"
-    assert sheet_of(response) == [("I", 100, 90, -10)]
-    assert lines_of(response) == [("I", -10)]
-
-
-async def test_a_surplus_is_written_as_a_plus(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100)
-
-    response = await count(client, admin_headers, ids, counted(ids, 110))
-
-    assert sheet_of(response) == [("I", 100, 110, 10)]
-    assert lines_of(response) == [("I", 10)]
-
-
-async def test_a_matching_count_is_kept_without_lines(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100)
-
-    response = await count(client, admin_headers, ids, counted(ids, 100))
-
-    assert response.status_code == 200
-    assert sheet_of(response) == [("I", 100, 100, 0)]
-    assert lines_of(response) == []
-
-
-async def test_pallets_never_entered_before(client, admin_headers, ids):
-    response = await count(client, admin_headers, ids, counted(ids, 5, quality="II"))
-
-    assert sheet_of(response) == [("II", 0, 5, 5)]
-
-
-async def test_after_the_count_the_balance_is_what_was_counted(
-    client, admin_headers, ids
-):
-    await receive(client, admin_headers, ids, 100)
-    await count(client, admin_headers, ids, counted(ids, 90))
-
-    sheet = await client.get(
-        "/inventories/sheet", headers=admin_headers, params={"area_uuid": ids["a"]}
-    )
-
-    rows = {(r["pallet_type"]["name"], r["quality"]["name"]): r for r in sheet.json()}
-    assert rows["EUR", "I"]["system_quantity"] == 90
-
-
-async def test_only_counted_rows_change(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100, quality="I")
-    await receive(client, admin_headers, ids, 30, quality="II")
-
-    await count(client, admin_headers, ids, counted(ids, 80, quality="I"))
-    sheet = await client.get(
-        "/inventories/sheet", headers=admin_headers, params={"area_uuid": ids["a"]}
-    )
-
-    assert [(r["quality"]["name"], r["system_quantity"]) for r in sheet.json()] == [
-        ("I", 80),
-        ("II", 30),
+    assert body["document_number"] == "SP/1"
+    assert [(ln["carrier_type"]["name"], ln["quantity"]) for ln in body["lines"]] == [
+        ("EURO", -4)
+    ]
+    assert body["inventory_lines"] == [
+        {
+            "carrier_type": {"uuid": carriers.euro, "name": "EURO"},
+            "system_quantity": 100,
+            "counted_quantity": 96,
+            "difference": -4,
+        }
     ]
 
 
-async def test_a_count_belongs_to_one_area(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100, area="a")
-    await receive(client, admin_headers, ids, 40, area="b")
+async def test_a_surplus_is_written_as_a_plus(client, admin_headers, carriers):
+    await receive(client, admin_headers, carriers.euro, 100)
 
-    await count(client, admin_headers, ids, counted(ids, 0), area="b")
-    sheet_a = await client.get(
-        "/inventories/sheet", headers=admin_headers, params={"area_uuid": ids["a"]}
-    )
+    response = await count(client, admin_headers, counted(carriers.euro, 103))
 
-    assert sheet_a.json()[0]["system_quantity"] == 100
+    assert response.json()["lines"][0]["quantity"] == 3
 
 
-async def test_several_rows_in_one_count(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100, quality="I")
-    await receive(client, admin_headers, ids, 30, quality="II")
+async def test_a_matching_count_is_kept_without_lines(client, admin_headers, carriers):
+    await receive(client, admin_headers, carriers.euro, 100)
 
+    response = await count(client, admin_headers, counted(carriers.euro, 100))
+
+    body = response.json()
+    assert body["lines"] == []
+    assert [r["difference"] for r in body["inventory_lines"]] == [0]
+
+
+async def test_the_starting_stock_is_a_first_count(client, admin_headers, carriers):
     response = await count(
         client,
         admin_headers,
-        ids,
-        counted(ids, 100, quality="I"),
-        counted(ids, 25, quality="II"),
+        counted(carriers.euro, 1200),
+        counted(carriers.damaged, 40),
+        counted(carriers.single, 300),
+        comment="Stan początkowy",
     )
 
-    assert sheet_of(response) == [("I", 100, 100, 0), ("II", 30, 25, -5)]
-    assert lines_of(response) == [("II", -5)]
+    assert response.status_code == 200, response.text
+    current = await stock(client, admin_headers)
+    assert (current["EURO"], current["EURO uszkodzone"], current["Jednorazowe"]) == (
+        1200,
+        40,
+        300,
+    )
 
 
-# ---------- validation ----------
+async def test_a_count_brings_a_negative_stock_back(client, admin_headers, carriers):
+    await move(client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 30))
+
+    response = await count(client, admin_headers, counted(carriers.euro, 10))
+
+    assert response.json()["lines"][0]["quantity"] == 40
+    assert (await stock(client, admin_headers))["EURO"] == 10
+
+
+async def test_only_counted_rows_change(client, admin_headers, carriers):
+    await receive(client, admin_headers, carriers.euro, 100)
+    await receive(client, admin_headers, carriers.single, 50)
+
+    await count(client, admin_headers, counted(carriers.euro, 90))
+
+    current = await stock(client, admin_headers)
+    assert (current["EURO"], current["Jednorazowe"]) == (90, 50)
 
 
 @pytest.mark.parametrize(
     ("lines", "message"),
     [
         ([], "Dodaj co najmniej jedną pozycję"),
-        ([("I", -1, "eur")], "Policzona ilość nie może być ujemna"),
-        ([("I", 1, "unknown")], "Nieznany typ palety"),
-        ([("I", 1, "chep")], "Typ palety „CHEP” jest nieaktywny"),
-        ([("unknown", 1, "eur")], "Nieznana jakość"),
-        ([("old", 1, "eur")], "Jakość „Stara” jest nieaktywna"),
-        ([("I", 1, "eur"), ("I", 2, "eur")], "Pozycja EUR / I występuje dwa razy"),
+        ([("euro", -1)], "Policzona ilość nie może być ujemna"),
+        ([("euro", 1), ("euro", 2)], "Pozycja EURO występuje dwa razy"),
+        ([("inactive", 1)], "Typ nośnika „CHEP” jest nieaktywny"),
     ],
 )
-async def test_invalid_counts(client, admin_headers, ids, lines, message):
-    unknown = str(uuid4())
-    payload = [
-        counted(
-            ids,
-            quantity,
-            quality=unknown if quality == "unknown" else quality,
-            pallet_type=unknown if pallet_type == "unknown" else pallet_type,
-        )
-        for quality, quantity, pallet_type in lines
-    ]
-
-    response = await count(client, admin_headers, ids, *payload)
+async def test_invalid_counts(client, admin_headers, carriers, lines, message):
+    response = await count(
+        client,
+        admin_headers,
+        *(counted(getattr(carriers, t), q) for t, q in lines),
+    )
 
     assert response.status_code == 400
     assert response.json() == {"message": message}
 
 
-async def test_a_count_cannot_be_dated(client, admin_headers, ids):
-    response = await count(
-        client, admin_headers, ids, counted(ids, 1), operation_date="2020-01-01"
-    )
+async def test_the_sheet_lists_every_active_type(client, admin_headers, carriers):
+    await receive(client, admin_headers, carriers.euro, 70)
 
-    assert response.json()["operation_date"] == warehouse_today().isoformat()
+    response = await client.get("/inventories/sheet", headers=admin_headers)
 
-
-async def test_not_through_the_movements_endpoint(client, admin_headers, ids):
-    response = await client.post(
-        "/movements",
-        headers=admin_headers,
-        json={
-            "type": "INVENTORY",
-            "area_uuid": ids["a"],
-            "lines": [counted(ids, 1) | {"quantity": 1}],
-        },
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {"message": "Inwentaryzację wprowadza się arkuszem spisu"}
-
-
-# ---------- the empty sheet ----------
-
-
-async def test_the_sheet_lists_every_active_type_and_quality(
-    client, admin_headers, ids
-):
-    await receive(client, admin_headers, ids, 7, quality="II")
-
-    response = await client.get(
-        "/inventories/sheet", headers=admin_headers, params={"area_uuid": ids["a"]}
-    )
-
+    assert response.status_code == 200, response.text
     assert [
-        (r["pallet_type"]["name"], r["quality"]["name"], r["system_quantity"])
+        (r["group"]["name"], r["carrier_type"]["name"], r["system_quantity"])
         for r in response.json()
-    ] == [("EUR", "I", 0), ("EUR", "II", 7)]
+    ] == [
+        ("EUR", "EURO", 70),
+        ("EUR", "EURO uszkodzone", 0),
+        ("EUR", "EURO utylizacja", 0),
+        ("Jednorazowe", "Jednorazowe", 0),
+    ]
 
 
-# ---------- who ----------
-
-
-async def operator(client, session, *area_uuids, role="operator"):
-    user = await make_user(session, "jan", role=role)
-    if area_uuids:
-        await session.execute(
-            insert(user_areas),
-            [{"user_uuid": user.uuid, "area_uuid": UUID(a)} for a in area_uuids],
-        )
-        await session.commit()
-    return await login(client, "jan")
-
-
-async def test_the_only_area_is_used_automatically(client, session, ids):
-    headers = await operator(client, session, ids["b"])
+async def test_a_viewer_cannot_count(client, session, carriers):
+    await make_user(session, "jan", role="viewer")
+    headers = await login(client, "jan")
 
     sheet = await client.get("/inventories/sheet", headers=headers)
-    response = await client.post(
-        "/inventories", headers=headers, json={"lines": [counted(ids, 3)]}
-    )
+    approve = await count(client, headers, counted(carriers.euro, 1))
 
-    assert sheet.status_code == 200
-    assert response.json()["area"]["name"] == "Wysyłka 445"
+    assert sheet.status_code == approve.status_code == 403
 
 
-async def test_operator_counts_only_their_areas(client, session, ids):
-    headers = await operator(client, session, ids["a"])
+async def test_counts_are_in_the_movement_history(client, admin_headers, carriers):
+    await count(client, admin_headers, counted(carriers.euro, 5))
 
-    sheet = await client.get(
-        "/inventories/sheet", headers=headers, params={"area_uuid": ids["b"]}
-    )
-    response = await count(client, headers, ids, counted(ids, 1), area="b")
+    listed = await client.get("/movements?type=INVENTORY", headers=admin_headers)
 
-    assert sheet.status_code == response.status_code == 403
-
-
-async def test_viewer_cannot_count(client, session, ids):
-    headers = await operator(client, session, ids["a"], role="viewer")
-
-    sheet = await client.get(
-        "/inventories/sheet", headers=headers, params={"area_uuid": ids["a"]}
-    )
-    response = await count(client, headers, ids, counted(ids, 1))
-
-    assert sheet.status_code == response.status_code == 403
-
-
-# ---------- history ----------
-
-
-async def test_counts_are_in_the_movement_history(client, admin_headers, ids):
-    await receive(client, admin_headers, ids, 100)
-    created = await count(client, admin_headers, ids, counted(ids, 95))
-
-    listed = await client.get(
-        "/movements", headers=admin_headers, params={"type": "INVENTORY"}
-    )
-    one = await client.get(
-        f"/movements/{created.json()['uuid']}", headers=admin_headers
-    )
-    receipt = (
-        await client.get(
-            "/movements", headers=admin_headers, params={"type": "RECEIPT"}
-        )
-    ).json()[0]
-
-    assert [m["uuid"] for m in listed.json()] == [created.json()["uuid"]]
-    assert one.json() == created.json()
-    assert receipt["inventory_lines"] is None
-
-
-async def test_a_quality_used_only_in_a_matching_count_is_not_deleted(
-    client, admin_headers, ids
-):
-    await count(client, admin_headers, ids, counted(ids, 0, quality="II"))
-
-    response = await client.delete(f"/qualities/{ids['II']}", headers=admin_headers)
-
-    assert response.status_code == 409
+    assert [m["type_label"] for m in listed.json()] == ["Inwentaryzacja"]
+    assert listed.json()[0]["inventory_lines"][0]["counted_quantity"] == 5

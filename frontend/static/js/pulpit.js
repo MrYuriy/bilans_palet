@@ -1,4 +1,4 @@
-// Pulpit: stock now (per quality and per area), the warehouse day, recent movements.
+// Pulpit: stock now (per carrier group and type), the warehouse day, recent movements.
 
 function renderDay(settings) {
   document.getElementById("day-badge").textContent =
@@ -11,52 +11,48 @@ function renderDay(settings) {
 }
 
 function renderStock(balance) {
-  const manyTypes = new Set(balance.total.map((r) => r.pallet_type.uuid)).size > 1;
-  const areaCount = balance.areas.length;
-
-  document.getElementById("kpis").innerHTML = balance.total
+  document.getElementById("kpis").innerHTML = balance.groups
     .map(
-      (r) => `
+      (g) => `
       <div class="kpi">
-        <span class="lb">${esc(pairLabel(r, manyTypes))}</span>
-        <span class="v">${fmt(r.quantity)}</span>
-        <span class="d">szt. łącznie${areaCount > 1 ? ` · ${areaCount} ${plural(areaCount, "obszar", "obszary", "obszarów")}` : ""}</span>
+        <span class="lb">${esc(g.group.name)}</span>
+        <span class="v">${fmt(g.total)}</span>
+        <span class="d">szt. w raportach</span>
       </div>`
     )
     .join("");
 
-  const pairs = balance.total.map((r) => `${r.pallet_type.uuid}|${r.quality.uuid}`);
-  const head = balance.total.map((r) => `<th class="num">${esc(pairLabel(r, manyTypes))}</th>`).join("");
-  const body = balance.areas
-    .map((a) => {
-      const byPair = Object.fromEntries(
-        a.rows.map((r) => [`${r.pallet_type.uuid}|${r.quality.uuid}`, r.quantity])
-      );
-      const cells = pairs.map((p) => `<td class="num">${fmt(byPair[p] || 0)}</td>`).join("");
-      return `<tr><td class="strong">${esc(a.area.name)}</td>${cells}</tr>`;
+  const rows = balance.groups
+    .map((g) => {
+      const types = g.rows
+        .map(
+          (r) => `<tr>
+            <td style="padding-left:24px">${esc(r.carrier_type.name)}
+              ${r.carrier_type.count_in_reports ? "" : '<span class="bg nu">poza raportami</span>'}</td>
+            <td class="num">${fmt(r.quantity)}</td>
+          </tr>`
+        )
+        .join("");
+      return `<tr><td colspan="2" class="strong" style="background:#fafbf9">${esc(g.group.name)}</td></tr>
+        ${types}
+        <tr class="sum"><td style="padding-left:24px">Razem w raportach</td><td class="num">${fmt(g.total)}</td></tr>`;
     })
     .join("");
-  const total = balance.total.map((r) => `<td class="num">${fmt(r.quantity)}</td>`).join("");
 
-  document.getElementById("areas-table").innerHTML = areaCount
-    ? `<thead><tr><th>Obszar</th>${head}</tr></thead>
-       <tbody>${body}</tbody>
-       ${areaCount > 1 ? `<tfoot><tr class="sum"><td>Razem</td>${total}</tr></tfoot>` : ""}`
-    : `<tbody><tr><td class="empty">Brak obszarów</td></tr></tbody>`;
-
-  return manyTypes;
+  document.getElementById("stock-table").innerHTML = balance.groups.length
+    ? `<thead><tr><th>Grupa / typ nośnika</th><th class="num">Stan</th></tr></thead><tbody>${rows}</tbody>`
+    : `<tbody><tr><td class="empty">Brak typów nośników</td></tr></tbody>`;
 }
 
-function renderRecent(movements, manyTypes) {
+function renderRecent(movements) {
   document.getElementById("recent-table").innerHTML = movements.length
-    ? `<thead><tr><th>Data</th><th>Operacja</th><th>Obszar</th><th>Pozycje</th><th>Użytkownik</th></tr></thead>
+    ? `<thead><tr><th>Data</th><th>Operacja</th><th>Pozycje</th><th>Użytkownik</th></tr></thead>
        <tbody>${movements
          .map(
            (m) => `<tr class="click" data-uuid="${m.uuid}">
              <td class="mut">${fmtDate(m.operation_date)}</td>
              <td class="strong">${esc(m.type_label)}</td>
-             <td>${esc(m.area.name)}</td>
-             <td>${linesSummary(m, manyTypes)}</td>
+             <td>${linesSummary(m)}</td>
              <td class="mut">${esc(m.user.username)}</td>
            </tr>`
          )
@@ -76,6 +72,6 @@ function renderRecent(movements, manyTypes) {
     api("/movements", { query: { limit: 8 } }),
   ]);
   renderDay(settings);
-  const manyTypes = renderStock(balance);
-  renderRecent(recent, manyTypes);
+  renderStock(balance);
+  renderRecent(recent);
 })();

@@ -1,8 +1,7 @@
-// Bilans dzienny: the balance of one warehouse day per area and in total.
+// Bilans dzienny: the balance of one warehouse day per carrier group and type.
 // A closed day shows its stored balance (the D-1 report); the open day is a preview.
 
 const $ = (id) => document.getElementById(id);
-const COLUMNS = ["opening", "receipts", "shipments", "corrections", "reclassifications", "closing"];
 let currentDay = null; // the open warehouse day: no later day exists yet
 
 function shiftDay(iso, days) {
@@ -27,9 +26,6 @@ function rowCells(r) {
 }
 
 function render(data) {
-  const manyTypes = new Set(data.total.map((r) => r.pallet_type.uuid)).size > 1;
-  const label = (r) => esc(pairLabel(r, manyTypes));
-
   const status = $("status");
   if (data.closed) {
     status.className = "bg ok";
@@ -39,27 +35,27 @@ function render(data) {
     status.textContent = "Podgląd — doba otwarta";
   }
 
-  const head = `<thead><tr><th>Obszar / pozycja</th><th class="num">Stan otwarcia</th>
-    <th class="num">Przyjęcia</th><th class="num">Wysyłki</th><th class="num">Korekty</th>
+  const head = `<thead><tr><th>Grupa / typ nośnika</th><th class="num">Stan otwarcia</th>
+    <th class="num">Przyjęcia</th><th class="num">Wydania</th><th class="num">Korekty</th>
     <th class="num">Przeksięgowania</th><th class="num">Stan zamknięcia</th></tr></thead>`;
 
-  const areas = data.areas
-    .map((a) => {
-      const rows = a.rows.length
-        ? a.rows.map((r) => `<tr><td style="padding-left:24px">${label(r)}</td>${rowCells(r)}</tr>`).join("")
-        : '<tr><td colspan="7" class="mut" style="padding-left:24px">brak stanu i ruchu</td></tr>';
-      return `<tr><td colspan="7" class="strong" style="background:#fafbf9">${esc(a.area.name)}</td></tr>${rows}`;
+  const groups = data.groups
+    .map((g) => {
+      const rows = g.rows
+        .map(
+          (r) => `<tr><td style="padding-left:24px">${esc(r.carrier_type.name)}
+            ${r.carrier_type.count_in_reports ? "" : '<span class="bg nu">poza raportami</span>'}</td>${rowCells(r)}</tr>`
+        )
+        .join("");
+      return `<tr><td colspan="7" class="strong" style="background:#fafbf9">${esc(g.group.name)}</td></tr>
+        ${rows}
+        <tr class="sum"><td style="padding-left:24px">Razem w raportach</td>${rowCells(g.total)}</tr>`;
     })
     .join("");
 
-  const total = data.areas.length > 1 && data.total.length
-    ? `<tr><td colspan="7" class="strong" style="background:#eef5f1">Razem</td></tr>` +
-      data.total.map((r) => `<tr class="sum"><td style="padding-left:24px">${label(r)}</td>${rowCells(r)}</tr>`).join("")
-    : "";
-
-  $("balance").innerHTML = data.areas.length
-    ? `${head}<tbody>${areas}${total}</tbody>`
-    : '<tbody><tr><td class="empty">Brak obszarów</td></tr></tbody>';
+  $("balance").innerHTML = data.groups.length
+    ? `${head}<tbody>${groups}</tbody>`
+    : '<tbody><tr><td class="empty">Brak typów nośników</td></tr></tbody>';
 
   $("prev-day").disabled = false;
   $("next-day").disabled = data.day >= currentDay;
@@ -68,7 +64,7 @@ function render(data) {
 async function load(day) {
   setMsg($("msg"), "");
   try {
-    const data = await api("/balances/daily", { query: { day, area_uuid: $("area").value } });
+    const data = await api("/balances/daily", { query: { day } });
     $("day").value = data.day;
     render(data);
   } catch (err) {
@@ -82,17 +78,12 @@ async function load(day) {
   currentDay = settings.current_day;
   $("day").max = currentDay;
 
-  // Operators read only their areas; the others read every area.
-  const areas = App.user.role === "operator" ? App.user.areas : await api("/areas");
-  $("area").innerHTML += areas.map((a) => `<option value="${a.uuid}">${esc(a.name)}</option>`).join("");
-
   $("day").onchange = () => $("day").value && load($("day").value);
-  $("area").onchange = () => load($("day").value);
   $("prev-day").onclick = () => load(shiftDay($("day").value, -1));
   $("next-day").onclick = () => load(shiftDay($("day").value, 1));
   $("export").onclick = async () => {
     try {
-      await download("/balances/daily.xlsx", { day: $("day").value, area_uuid: $("area").value });
+      await download("/balances/daily.xlsx", { day: $("day").value });
     } catch (err) {
       setMsg($("msg"), err.message);
     }

@@ -34,7 +34,6 @@ async def create_user(payload: UserCreate, session: SessionDep, admin: UsersAdmi
         payload.password,
         payload.role,
         payload.must_change_password,
-        payload.areas,
     )
     await session.commit()
     return user
@@ -58,7 +57,6 @@ async def update_user(
         payload.role,
         payload.must_change_password,
         payload.is_active,
-        payload.areas,
     )
     await session.commit()
     return user

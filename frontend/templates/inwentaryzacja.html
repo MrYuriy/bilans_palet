@@ -6,20 +6,10 @@
 {% block crumb %}<span id="day"></span>{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="pad row" style="align-items:flex-end">
-        <div class="fld" id="area-field">
-            <label for="area">Obszar</label>
-            <select id="area"></select>
-        </div>
-        <div class="mut hidden" id="area-fixed"></div>
-        <span class="sp"></span>
-        <span class="mut">Puste pole = pozycja nieliczona (stan bez zmian)</span>
-    </div>
-</div>
-
 <form class="card" id="count-form" novalidate>
-    <div class="hd"><h2>Arkusz spisu</h2><span class="sub" id="sheet-sub"></span></div>
+    <div class="hd"><h2>Arkusz spisu</h2>
+        <span class="sub">Puste pole = pozycja nieliczona (stan bez zmian).
+            Pierwszy spis wprowadza stan początkowy.</span></div>
     <div class="scroll"><table id="sheet"></table></div>
     <div class="pad grid2">
         <div class="fld">
@@ -27,7 +17,7 @@
             <input id="document" maxlength="100" placeholder="opcjonalnie">
         </div>
         <div class="fld">
-            <label for="comment">Komentarz</label>
+            <label for="comment">Notatka</label>
             <textarea id="comment" rows="2" placeholder="opcjonalnie"></textarea>
         </div>
     </div>
