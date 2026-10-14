@@ -18,7 +18,7 @@ D1, D2, D3 = (TODAY - timedelta(days=n) for n in (3, 2, 1))
 
 
 def after_cutoff(day):
-    """A moment early in the warehouse day after ``day`` (06:00 cut-off)."""
+    """A moment early in the warehouse day after ``day``."""
     return datetime.combine(day + timedelta(days=1), time(7, 0))
 
 

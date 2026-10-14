@@ -4,7 +4,7 @@ from sqlalchemy import CheckConstraint, Column, Integer, Time, text
 
 from app.models.base import BaseModel, TimestampMixin
 
-DEFAULT_DAY_CUTOFF = time(6, 0)
+DEFAULT_DAY_CUTOFF = time(0, 0)
 
 
 class SystemSettings(BaseModel, TimestampMixin):
@@ -16,10 +16,10 @@ class SystemSettings(BaseModel, TimestampMixin):
     id = Column(Integer, primary_key=True, default=1)
 
     # Warehouse day boundary: a day runs from this hour to the same hour next day,
-    # and is closed when it ends (e.g. 06:00: a movement at 03:00 belongs to the
-    # previous day).
+    # and is closed when it ends. Midnight by default (the day ends at 23:59:59);
+    # with 06:00 a movement at 03:00 would belong to the previous day.
     day_cutoff = Column(
-        Time, nullable=False, default=DEFAULT_DAY_CUTOFF, server_default=text("'06:00'")
+        Time, nullable=False, default=DEFAULT_DAY_CUTOFF, server_default=text("'00:00'")
     )
 
     def __repr__(self):

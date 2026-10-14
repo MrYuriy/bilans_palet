@@ -25,12 +25,12 @@ def test_business_date(moment, cutoff, day):
     assert business_date(moment, cutoff) == day
 
 
-async def test_default_cutoff_is_six(client, admin_headers):
+async def test_default_cutoff_is_midnight(client, admin_headers):
     response = await client.get("/settings", headers=admin_headers)
 
     assert response.status_code == 200
     assert response.json() == {
-        "day_cutoff": "06:00",
+        "day_cutoff": "00:00",
         "current_day": warehouse_today().isoformat(),
         "last_closed_day": None,
     }
@@ -53,12 +53,12 @@ async def test_changing_the_cutoff_is_logged(client, admin_headers):
     [entry] = (await client.get("/audit", headers=admin_headers)).json()
 
     assert (entry["entity"], entry["entity_label"]) == ("settings", "Ustawienia")
-    assert entry["old_data"] == {"day_cutoff": "06:00"}
+    assert entry["old_data"] == {"day_cutoff": "00:00"}
     assert entry["new_data"] == {"day_cutoff": "05:00"}
 
 
 async def test_saving_the_same_cutoff_is_not_logged(client, admin_headers):
-    await client.put("/settings", headers=admin_headers, json={"day_cutoff": "06:00"})
+    await client.put("/settings", headers=admin_headers, json={"day_cutoff": "00:00"})
 
     assert (await client.get("/audit", headers=admin_headers)).json() == []
 
