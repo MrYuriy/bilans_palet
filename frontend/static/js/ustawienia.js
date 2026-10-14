@@ -1,9 +1,25 @@
-// Ustawienia (admin): the warehouse day cut-off, the dictionaries (areas,
-// pallet types, qualities) and the users.
+// Ustawienia (admin): the warehouse day cut-off, the dictionaries (carrier
+// groups and types, ...) and the users.
 
 const $ = (id) => document.getElementById(id);
 
+// ordered: has a "Kolejność" (orderMin = lowest allowed); grouped: belongs to a
+// carrier group; counted: has the "counted in reports" flag.
 const DICTS = {
+  "carrier-groups": {
+    url: "/carrier-groups",
+    title: "Grupy nośników",
+    hint: "Grupa łączy typy nośników liczone razem (np. EUR). Grupę z typami można tylko dezaktywować.",
+  },
+  "carrier-types": {
+    url: "/carrier-types",
+    title: "Typy nośników",
+    hint: "Każdy typ ma własny stan. Raporty liczą tylko typy „w raportach”, pozostałe pokazuje filtr.",
+    ordered: true,
+    orderMin: 0,
+    grouped: true,
+    counted: true,
+  },
   areas: {
     url: "/areas",
     title: "Obszary",
@@ -19,6 +35,7 @@ const DICTS = {
     title: "Jakości",
     hint: "Kolejność: 1 = najlepsza. Przeksięgowanie jest możliwe tylko do gorszej jakości.",
     ordered: true,
+    orderMin: 1,
   },
 };
 
@@ -63,29 +80,47 @@ $("day-form").addEventListener("submit", async (e) => {
 // ---------- dictionaries ----------
 
 let dict = null; // current DICTS entry
+let groups = []; // carrier groups, for the types' group select
+
+function groupOptions(selected) {
+  return groups
+    .filter((g) => g.is_active || g.uuid === selected)
+    .map((g) => `<option value="${g.uuid}" ${g.uuid === selected ? "selected" : ""}>${esc(g.name)}</option>`)
+    .join("");
+}
 
 async function openDictionary(key) {
   dict = DICTS[key];
   $("dict-title").textContent = dict.title;
   $("dict-hint").textContent = dict.hint;
   $("dict-order-field").classList.toggle("hidden", !dict.ordered);
+  $("dict-order").min = dict.orderMin ?? "";
+  $("dict-group-field").classList.toggle("hidden", !dict.grouped);
+  $("dict-group").required = !!dict.grouped;
+  $("dict-counted-field").classList.toggle("hidden", !dict.counted);
   $("dict-form").reset();
   setMsg($("dict-msg"), "");
+  if (dict.grouped) {
+    groups = await api("/carrier-groups");
+    $("dict-group").innerHTML = groupOptions(null);
+  }
   await loadDictionary();
 }
 
 async function loadDictionary() {
   const rows = await api(dict.url);
-  const ordered = dict.ordered;
+  const { ordered, grouped, counted } = dict;
   $("dict-table").innerHTML = rows.length
-    ? `<thead><tr><th>Nazwa</th>${ordered ? '<th class="num">Kolejność</th>' : ""}<th>Opis</th>
-        <th>Status</th><th></th></tr></thead>
+    ? `<thead><tr>${grouped ? "<th>Grupa</th>" : ""}<th>Nazwa</th>${ordered ? '<th class="num">Kolejność</th>' : ""}<th>Opis</th>
+        ${counted ? "<th>Raporty</th>" : ""}<th>Status</th><th></th></tr></thead>
        <tbody>${rows
          .map(
            (r) => `<tr data-uuid="${r.uuid}">
+             ${grouped ? `<td>${esc(r.group.name)}</td>` : ""}
              <td class="strong">${esc(r.name)}</td>
              ${ordered ? `<td class="num">${r.sort_order}</td>` : ""}
              <td>${esc(r.description || "")}</td>
+             ${counted ? `<td>${r.count_in_reports ? '<span class="bg ok">W raportach</span>' : '<span class="bg nu">Ukryty</span>'}</td>` : ""}
              <td>${r.is_active ? '<span class="bg ok">Aktywny</span>' : '<span class="bg nu">Nieaktywny</span>'}</td>
              <td class="row" style="justify-content:flex-end">
                <button class="sm d-edit">Zmień</button>
@@ -115,11 +150,13 @@ async function loadDictionary() {
 }
 
 function editDictionaryRow(tr, row) {
-  const ordered = dict.ordered;
+  const { ordered, grouped, counted } = dict;
   tr.innerHTML = `
+    ${grouped ? `<td><select class="e-group">${groupOptions(row.group.uuid)}</select></td>` : ""}
     <td><input class="e-name" value="${esc(row.name)}"></td>
-    ${ordered ? `<td class="num"><input class="num-in e-order" type="number" min="1" value="${row.sort_order}"></td>` : ""}
+    ${ordered ? `<td class="num"><input class="num-in e-order" type="number" min="${dict.orderMin}" value="${row.sort_order}"></td>` : ""}
     <td><input class="e-description" value="${esc(row.description || "")}"></td>
+    ${counted ? `<td><label class="row"><input type="checkbox" class="e-counted" ${row.count_in_reports ? "checked" : ""}> w raportach</label></td>` : ""}
     <td></td>
     <td class="row" style="justify-content:flex-end">
       <button class="sm pri e-save">Zapisz</button><button class="sm e-cancel">Anuluj</button>
@@ -131,6 +168,8 @@ function editDictionaryRow(tr, row) {
       description: tr.querySelector(".e-description").value || null,
     };
     if (ordered) changes.sort_order = parseInt(tr.querySelector(".e-order").value, 10);
+    if (grouped) changes.group_uuid = tr.querySelector(".e-group").value;
+    if (counted) changes.count_in_reports = tr.querySelector(".e-counted").checked;
     saveDictionaryRow(row, changes);
   };
 }
@@ -148,10 +187,13 @@ async function saveDictionaryRow(row, changes) {
 $("dict-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = { name: $("dict-name").value, description: $("dict-description").value || null };
-  if (dict.ordered) body.sort_order = parseInt($("dict-order").value, 10);
+  if (dict.ordered && $("dict-order").value !== "") body.sort_order = parseInt($("dict-order").value, 10);
+  if (dict.grouped) body.group_uuid = $("dict-group").value;
+  if (dict.counted) body.count_in_reports = $("dict-counted").checked;
   try {
     const row = await api(dict.url, { method: "POST", body });
     $("dict-form").reset();
+    if (dict.grouped) $("dict-group").value = body.group_uuid;
     setMsg($("dict-msg"), `Dodano „${row.name}”`, "success");
     await loadDictionary();
   } catch (err) {

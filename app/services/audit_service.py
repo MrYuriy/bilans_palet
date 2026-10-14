@@ -17,6 +17,8 @@ ENTITY_LABELS = {
     "area": "Obszar",
     "pallet_type": "Typ palety",
     "quality": "Jakość",
+    "carrier_group": "Grupa nośników",
+    "carrier_type": "Typ nośnika",
     "settings": "Ustawienia",
 }
 

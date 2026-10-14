@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.area import Area
+from app.models.carrier_group import CarrierGroup
+from app.models.carrier_type import CarrierType
 from app.models.pallet_type import PalletType
 from app.models.quality import Quality
 from app.models.role import Role
@@ -50,6 +52,15 @@ AREAS = [
 ]
 PALLET_TYPES = ["EUR"]
 QUALITIES = [("I", 1), ("II", 2), ("III", 3)]
+# group -> [(type, counted in reports)], in the order shown in lists.
+CARRIERS = {
+    "EUR": [
+        ("EURO", True),
+        ("EURO uszkodzone", False),
+        ("EURO utylizacja", False),
+    ],
+    "Jednorazowe": [("Jednorazowe", True)],
+}
 
 
 async def _is_empty(session: AsyncSession, model) -> bool:
@@ -77,6 +88,22 @@ async def seed_dictionaries(session: AsyncSession) -> list[str]:
     if await _is_empty(session, Quality):
         session.add_all(Quality(name=n, sort_order=o) for n, o in QUALITIES)
         filled.append("qualities")
+
+    if await _is_empty(session, CarrierGroup):
+        for group_name, types in CARRIERS.items():
+            group = CarrierGroup(name=group_name)
+            session.add(group)
+            await session.flush()
+            session.add_all(
+                CarrierType(
+                    group_uuid=group.uuid,
+                    name=name,
+                    sort_order=order,
+                    count_in_reports=counted,
+                )
+                for order, (name, counted) in enumerate(types, start=1)
+            )
+        filled.append("carrier groups and types")
 
     await session.flush()
     return filled

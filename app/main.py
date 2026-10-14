@@ -14,6 +14,8 @@ from app.routers.area import router as area_router
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.balance import router as balance_router
+from app.routers.carrier_group import router as carrier_group_router
+from app.routers.carrier_type import router as carrier_type_router
 from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
 from app.routers.pages import STATIC_DIR
@@ -77,6 +79,8 @@ app.include_router(users_router)
 app.include_router(area_router)
 app.include_router(pallet_type_router)
 app.include_router(quality_router)
+app.include_router(carrier_group_router)
+app.include_router(carrier_type_router)
 app.include_router(movement_router)
 app.include_router(inventory_router)
 app.include_router(audit_router)

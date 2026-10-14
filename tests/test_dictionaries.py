@@ -1,11 +1,12 @@
 """Behaviour shared by every admin-managed dictionary (areas, pallet types, ...)."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from uuid import uuid4
 
 import pytest
 
+from app.models.carrier_group import CarrierGroup
 from tests.conftest import login, make_user
 
 
@@ -16,6 +17,8 @@ class Dictionary:
     duplicate: str
     # Extra fields a new row needs; gets the row's position (1, 2, ...).
     extra: Callable[[int], dict] = field(default=lambda n: {})
+    # Rows belong to a carrier group (created by the fixture).
+    needs_group: bool = False
 
 
 DICTIONARIES = [
@@ -44,12 +47,36 @@ DICTIONARIES = [
         ),
         id="qualities",
     ),
+    pytest.param(
+        Dictionary(
+            url="/carrier-groups",
+            not_found="Nie znaleziono grupy nośników",
+            duplicate="Grupa o tej nazwie już istnieje",
+        ),
+        id="carrier-groups",
+    ),
+    pytest.param(
+        Dictionary(
+            url="/carrier-types",
+            not_found="Nie znaleziono typu nośnika",
+            duplicate="Typ nośnika o tej nazwie już istnieje",
+            needs_group=True,
+        ),
+        id="carrier-types",
+    ),
 ]
 
 
 @pytest.fixture(params=DICTIONARIES)
-def d(request) -> Dictionary:
-    return request.param
+async def d(request, session) -> Dictionary:
+    dictionary = request.param
+    if not dictionary.needs_group:
+        return dictionary
+    group = CarrierGroup(name="EUR")
+    session.add(group)
+    await session.commit()
+    group_uuid = str(group.uuid)
+    return replace(dictionary, extra=lambda n: {"group_uuid": group_uuid})
 
 
 async def create(client, headers, d: Dictionary, name: str, n: int = 1, **fields):

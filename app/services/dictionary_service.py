@@ -16,12 +16,8 @@ from app.services.audit_service import AuditService
 _NOT_AUDITED = {"uuid", "created_at", "updated_at"}
 
 
-def _snapshot(row) -> dict[str, Any]:
-    return row.to_dict(exclude=_NOT_AUDITED)
-
-
 class DictionaryService[ModelType]:
-    """Shared CRUD for the admin-managed dictionaries (areas, pallet types, qualities).
+    """Shared CRUD for the admin-managed dictionaries (carrier groups and types, ...).
 
     Every dictionary row has a unique ``name`` and an ``is_active`` flag.
     Subclasses set the Polish messages, the list order and where movements
@@ -45,6 +41,10 @@ class DictionaryService[ModelType]:
 
     async def _validate(self, data: dict[str, Any], current: ModelType | None) -> None:
         """Extra checks for a subclass; ``current`` is None on create."""
+
+    async def _audit_view(self, row: ModelType) -> dict[str, Any]:
+        """What the audit log keeps of a row (JSON-safe values only)."""
+        return row.to_dict(exclude=_NOT_AUDITED)
 
     async def list(self, active: bool | None = None) -> list[ModelType]:
         params = {} if active is None else {"is_active": active}
@@ -73,7 +73,12 @@ class DictionaryService[ModelType]:
         await self._validate(data, None)
         row = await self.repo.create_one(data)
         await self.audit.log(
-            actor, "create", self.entity, row.uuid, row.name, new_data=_snapshot(row)
+            actor,
+            "create",
+            self.entity,
+            row.uuid,
+            row.name,
+            new_data=await self._audit_view(row),
         )
         return row
 
@@ -85,10 +90,10 @@ class DictionaryService[ModelType]:
         await self._validate(data, current)
         if not data:
             return current
-        before = _snapshot(current)
+        before = await self._audit_view(current)
         row = await self.repo.update_one(row_uuid, data)
         await self.audit.log_update(
-            actor, self.entity, row.uuid, row.name, before, _snapshot(row)
+            actor, self.entity, row.uuid, row.name, before, await self._audit_view(row)
         )
         return row
 
@@ -101,6 +106,11 @@ class DictionaryService[ModelType]:
             if in_use.scalar_one():
                 raise ObjectAlreadyExistsException(self.in_use_message)
         await self.audit.log(
-            actor, "delete", self.entity, row.uuid, row.name, old_data=_snapshot(row)
+            actor,
+            "delete",
+            self.entity,
+            row.uuid,
+            row.name,
+            old_data=await self._audit_view(row),
         )
         await self.repo.delete_one(row_uuid)

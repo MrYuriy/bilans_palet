@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from app.core.security import verify_password
 from app.models.area import Area
+from app.models.carrier_type import CarrierType
 from app.models.pallet_type import PalletType
 from app.models.quality import Quality
 from app.models.role import Role
@@ -75,10 +76,17 @@ async def test_fills_empty_dictionaries(session):
     filled = await seed_dictionaries(session)
     await session.commit()
 
-    assert filled == ["areas", "pallet types", "qualities"]
+    assert filled == ["areas", "pallet types", "qualities", "carrier groups and types"]
     assert sorted(await names(session, Area, Area.name)) == sorted(AREAS)
     assert await names(session, PalletType, PalletType.name) == ["EUR"]
     assert await names(session, Quality, Quality.sort_order) == ["I", "II", "III"]
+    types = (await session.execute(select(CarrierType))).scalars().all()
+    assert {(t.name, t.count_in_reports) for t in types} == {
+        ("EURO", True),
+        ("EURO uszkodzone", False),
+        ("EURO utylizacja", False),
+        ("Jednorazowe", True),
+    }
 
 
 async def test_running_again_adds_nothing(session):

@@ -1,6 +1,8 @@
 from app.models.area import Area
 from app.models.audit_log import AuditLog
 from app.models.base import Base
+from app.models.carrier_group import CarrierGroup
+from app.models.carrier_type import CarrierType
 from app.models.day_closure import DailyBalance, DayClosure
 from app.models.inventory import InventoryLine
 from app.models.movement import Movement, MovementLine, MovementType
@@ -15,6 +17,8 @@ __all__ = [
     "Area",
     "AuditLog",
     "Base",
+    "CarrierGroup",
+    "CarrierType",
     "DailyBalance",
     "DayClosure",
     "InventoryLine",

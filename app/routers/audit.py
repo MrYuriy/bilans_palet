@@ -16,6 +16,9 @@ router = APIRouter(prefix="/audit", tags=["Audit"])
 
 AuditReader = Annotated[User, Depends(require_permission("audit"))]
 
+# The entities the log knows, taken from the labels so a new one is added once.
+AuditEntity = Literal[tuple(ENTITY_LABELS)]
+
 
 def _out(entry: AuditLog) -> AuditLogOut:
     return AuditLogOut(
@@ -39,7 +42,7 @@ async def list_audit_log(
     response: Response,
     session: SessionDep,
     _: AuditReader,
-    entity: Literal["user", "area", "pallet_type", "quality", "settings"] | None = None,
+    entity: AuditEntity | None = None,
     entity_uuid: UUID | None = None,
     user_uuid: UUID | None = None,
     date_from: date | None = None,
