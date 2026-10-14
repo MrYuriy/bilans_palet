@@ -4,7 +4,7 @@
 services:
   app:
     build: .
-    container_name: bilans-api
+    container_name: monolit-api
     env_file:
       - .env
     environment:
@@ -12,7 +12,7 @@ services:
       # for running outside Docker.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     ports:
-      # 8011 on the host (the tunnel maps bilans.piatek-magazyn.com to it).
+      # 8011 on the host (the tunnel maps monolit.piatek-magazyn.com to it).
       - "8011:8000"
     restart: unless-stopped
     depends_on:
@@ -27,7 +27,7 @@ services:
 
   db:
     image: postgres:17
-    container_name: bilans-db
+    container_name: monolit-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

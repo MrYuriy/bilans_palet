@@ -4,7 +4,7 @@ from app.core.config.base import BaseConfig
 
 
 class AppConfig(BaseConfig):
-    PROJECT_NAME: str = "Bilans Palet EUR"
+    PROJECT_NAME: str = "MONOLIT"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     DEBUG: bool = False

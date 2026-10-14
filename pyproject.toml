@@ -1,5 +1,5 @@
 [project]
-name = "pallet-balance-system"
+name = "monolit"
 version = "0.1.0"
 description = "Pallet balance tracking system for Leroy Merlin (EUR pallets)"
 requires-python = ">=3.12"
