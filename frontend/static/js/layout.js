@@ -1,7 +1,13 @@
 // Shared shell of every /app page: who is signed in, which menu items they may
 // use. Pages wait for App.ready before loading their data.
 
-const ROLE_LABELS = { admin: "Administrator", operator: "Operator", viewer: "Podgląd" };
+const ROLE_LABELS = {
+  admin: "Administrator",
+  manager: "Manager",
+  controller: "Kontroler",
+  operator: "Operator",
+  viewer: "Obserwator",
+};
 
 const App = {
   user: null,

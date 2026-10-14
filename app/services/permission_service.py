@@ -11,14 +11,25 @@ class PermissionService:
     """Maps roles to the UI/API modules they may use.
 
     Each operation names the module it needs (operation_catalog), so who may
-    enter what is decided here, in one table.
+    enter what is decided here, in one table. Everyone signed in reads the
+    stock, the balances and the register.
+
+    The manager, controller and operator rights are provisional, until the
+    manager details them.
     """
 
     ROLE_PERMISSIONS: ClassVar[dict[str, frozenset[str]]] = {
+        # Everything, the configuration included.
         "admin": frozenset({"*"}),
-        "operator": frozenset(
-            {OPERATIONS_MODULE, RECLASSIFICATION_MODULE, INVENTORY_MODULE}
+        # Everything but the configuration (settings, dictionaries, users).
+        "manager": frozenset(
+            {OPERATIONS_MODULE, RECLASSIFICATION_MODULE, INVENTORY_MODULE, "audit"}
         ),
+        # Kontroler: re-classifications and stock counts.
+        "controller": frozenset({RECLASSIFICATION_MODULE, INVENTORY_MODULE}),
+        # The everyday operations.
+        "operator": frozenset({OPERATIONS_MODULE}),
+        # Obserwator: reads only.
         "viewer": frozenset(),
     }
 

@@ -29,8 +29,10 @@ load_dotenv()
 
 # Descriptions are shown in the admin UI, hence Polish.
 ROLES = [
-    ("admin", "Pełny dostęp"),
-    ("operator", "Wprowadzanie ruchów i inwentaryzacji"),
+    ("admin", "Pełny dostęp, także konfiguracja"),
+    ("manager", "Wszystkie operacje i audyt, bez konfiguracji"),
+    ("controller", "Przeksięgowania i inwentaryzacja"),
+    ("operator", "Operacje magazynowe"),
     ("viewer", "Tylko podgląd"),
 ]
 
@@ -116,21 +118,27 @@ async def seed_first_admin(
     return "created", generated
 
 
+async def seed_roles(session: AsyncSession) -> dict[str, Role]:
+    """Add the missing roles. Descriptions belong to the code, so an existing
+    role gets the current one."""
+    roles: dict[str, Role] = {}
+    for name, description in ROLES:
+        role = (
+            await session.execute(select(Role).where(Role.name == name))
+        ).scalar_one_or_none()
+        if role is None:
+            role = Role(name=name, description=description)
+            session.add(role)
+        else:
+            role.description = description
+        roles[name] = role
+    await session.flush()
+    return roles
+
+
 async def seed() -> None:
     async with AsyncSessionLocal() as session:
-        roles: dict[str, Role] = {}
-
-        for name, description in ROLES:
-            role = (
-                await session.execute(select(Role).where(Role.name == name))
-            ).scalar_one_or_none()
-
-            if role is None:
-                role = Role(name=name, description=description)
-                session.add(role)
-                await session.flush()
-
-            roles[name] = role
+        roles = await seed_roles(session)
 
         status, generated = await seed_first_admin(
             session, roles["admin"], ADMIN_USERNAME, ADMIN_PASSWORD
