@@ -61,6 +61,18 @@ class GroupDay(BaseModel):
     total: DayValues
 
 
+class HistoryPoint(BaseModel):
+    day: date
+    # Stock at the end of the day (the current day: so far).
+    quantity: int
+
+
+class HistoryOut(BaseModel):
+    """The stock of the picked types day by day, oldest first."""
+
+    days: list[HistoryPoint]
+
+
 class DailyBalanceOut(BaseModel):
     day: date
     # A closed day shows its stored balance; an open one is a live preview.

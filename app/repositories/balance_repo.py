@@ -39,6 +39,22 @@ class BalanceRepository:
             for type_uuid, kind, total in await self.session.execute(query)
         ]
 
+    async def daily_totals(
+        self, first: date, last: date
+    ) -> list[tuple[date, UUID, int]]:
+        """Signed sum per (day, carrier type) of the movements in the range."""
+        query = (
+            select(
+                Movement.operation_date,
+                MovementLine.carrier_type_uuid,
+                func.sum(MovementLine.quantity),
+            )
+            .join(Movement, MovementLine.movement_uuid == Movement.uuid)
+            .where(Movement.operation_date >= first, Movement.operation_date <= last)
+            .group_by(Movement.operation_date, MovementLine.carrier_type_uuid)
+        )
+        return list((await self.session.execute(query)).all())
+
     async def first_movement_day(self) -> date | None:
         return (
             await self.session.execute(select(func.min(Movement.operation_date)))

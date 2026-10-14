@@ -44,9 +44,42 @@ function renderStock(balance) {
     : `<tbody><tr><td class="empty">Nie wybrano typów nośników</td></tr></tbody>`;
 }
 
-async function loadStock() {
-  renderStock(await api("/balances/current", { query: { type: TypeFilter.query() } }));
+let historyDays = 30;
+let historyPoints = [];
+
+async function loadHistory() {
+  const data = await api("/balances/history", {
+    query: { days: historyDays, type: TypeFilter.query() },
+  });
+  historyPoints = data.days;
+  columnChart(document.getElementById("history-chart"), historyPoints, "szt.");
+  chartTable(document.getElementById("history-table"), historyPoints, "szt.");
 }
+
+// The table and the chart follow the same type filter.
+async function loadStock() {
+  const [balance] = await Promise.all([
+    api("/balances/current", { query: { type: TypeFilter.query() } }),
+    loadHistory(),
+  ]);
+  renderStock(balance);
+}
+
+document.querySelectorAll("#period .chip").forEach((chip) => {
+  chip.onclick = () => {
+    historyDays = parseInt(chip.dataset.days, 10);
+    document.querySelectorAll("#period .chip").forEach((c) => c.classList.toggle("on", c === chip));
+    loadHistory();
+  };
+});
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (historyPoints.length) columnChart(document.getElementById("history-chart"), historyPoints, "szt.");
+  }, 150);
+});
 
 function renderRecent(movements) {
   document.getElementById("recent-table").innerHTML = movements.length

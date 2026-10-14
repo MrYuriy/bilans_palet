@@ -24,6 +24,24 @@
 
 <div class="card">
     <div class="hd">
+        <h2>Stan w czasie</h2>
+        <span class="sub">suma wybranych typów na koniec dnia</span>
+        <span class="sp"></span>
+        <div class="tabs" id="period">
+            <button type="button" class="chip" data-days="7">7 dni</button>
+            <button type="button" class="chip on" data-days="30">1 miesiąc</button>
+            <button type="button" class="chip" data-days="90">3 miesiące</button>
+        </div>
+    </div>
+    <div class="pad"><div id="history-chart"></div></div>
+    <details class="pad" style="padding-top:0">
+        <summary class="mut">Pokaż wartości w tabeli</summary>
+        <div class="scroll"><table id="history-table"></table></div>
+    </details>
+</div>
+
+<div class="card">
+    <div class="hd">
         <h2>Ostatnie operacje</h2>
         <span class="sp"></span>
         <a href="/app/ruchy" class="sub">Cały rejestr</a>
@@ -32,4 +50,7 @@
 </div>
 {% endblock %}
 
-{% block page_scripts %}<script src="/static/js/pulpit.js?v={{ asset_version }}"></script>{% endblock %}
+{% block page_scripts %}
+<script src="/static/js/chart.js?v={{ asset_version }}"></script>
+<script src="/static/js/pulpit.js?v={{ asset_version }}"></script>
+{% endblock %}

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Response
 
 from app.dependencies import CurrentUserDep, SessionDep
-from app.schemas.balance import CurrentBalanceOut, DailyBalanceOut
+from app.schemas.balance import CurrentBalanceOut, DailyBalanceOut, HistoryOut
 from app.services import export_service
 from app.services.balance_service import BalanceService
 
@@ -50,3 +50,14 @@ async def daily_balance_xlsx(
             "Content-Disposition": f'attachment; filename="bilans_{data.day}.xlsx"'
         },
     )
+
+
+@router.get("/history", response_model=HistoryOut)
+async def balance_history(
+    session: SessionDep,
+    _: CurrentUserDep,
+    days: Annotated[int, Query(ge=1, le=366)] = 30,
+    types: TypesQuery = None,
+):
+    """The stock day by day for the chart (7 days, a month, three months)."""
+    return await BalanceService(session).history(days, types)

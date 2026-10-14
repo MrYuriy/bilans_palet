@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exc import BadRequestException
 from app.models.carrier_type import CarrierType
 from app.models.day_closure import DailyBalance, DayClosure
+from app.repositories.balance_repo import BalanceRepository
 from app.repositories.carrier_type_repo import CarrierTypeRepository
 from app.repositories.movement_repo import MovementRepository
 from app.schemas.balance import (
@@ -19,6 +20,8 @@ from app.schemas.balance import (
     GroupDay,
     GroupRef,
     GroupStock,
+    HistoryOut,
+    HistoryPoint,
     StockRow,
 )
 from app.services.day_balance import DayRow, compute_day
@@ -47,6 +50,7 @@ class BalanceService:
         self.session = session
         self.movements = MovementRepository(session)
         self.types = CarrierTypeRepository(session)
+        self.balances = BalanceRepository(session)
         self.settings = SettingsService(session)
 
     async def _shown(
@@ -149,3 +153,37 @@ class BalanceService:
             closed_at=closure.created_at if closure else None,
             groups=groups,
         )
+
+    # ---------- over time ----------
+
+    async def history(
+        self, days: int, type_uuids: Collection[UUID] | None = None
+    ) -> HistoryOut:
+        """The stock of the picked types (by default those counted in reports)
+        at the end of each of the last ``days`` days, today included."""
+        if type_uuids is None:
+            picked = {
+                t.uuid for t in await self.types.list_with_group() if t.count_in_reports
+            }
+        else:
+            picked = set(type_uuids)
+
+        last = await self.settings.current_day()
+        first = last - timedelta(days=days - 1)
+
+        stock = sum(
+            total
+            for t, total in (await self.balances.opening(first)).items()
+            if t in picked
+        )
+        moved: dict[date, int] = {}
+        for day, type_uuid, total in await self.balances.daily_totals(first, last):
+            if type_uuid in picked:
+                moved[day] = moved.get(day, 0) + total
+
+        points = []
+        for offset in range(days):
+            day = first + timedelta(days=offset)
+            stock += moved.get(day, 0)
+            points.append(HistoryPoint(day=day, quantity=stock))
+        return HistoryOut(days=points)
