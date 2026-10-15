@@ -76,6 +76,7 @@ class MovementService:
                 note_required=op.note_required,
                 counted_types_only=op.counted_types_only,
                 can_enter=op.type != MovementType.INVENTORY
+                and not op.imported
                 and self.permissions.has_access(user.role.name, op.module),
             )
             for op in OPERATIONS.values()
@@ -195,6 +196,8 @@ class MovementService:
         operation = OPERATIONS[data.type]
         if operation.type == MovementType.INVENTORY:
             raise BadRequestException("Inwentaryzację wprowadza się arkuszem spisu")
+        if operation.imported:
+            raise BadRequestException(f"„{operation.label}” księguje się z pliku")
         self.check_allowed(user, operation)
 
         operation_date = await self.operation_date(data.operation_date)

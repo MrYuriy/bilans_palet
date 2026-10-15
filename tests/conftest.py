@@ -179,7 +179,12 @@ async def carriers(session) -> Carriers:
     session.add_all([eur, single])
     await session.flush()
     types = {
-        "euro": CarrierType(group_uuid=eur.uuid, name="EURO", sort_order=1),
+        "euro": CarrierType(
+            group_uuid=eur.uuid,
+            name="EURO",
+            sort_order=1,
+            transplaner_name="PAL EUR/ EPAL",
+        ),
         "damaged": CarrierType(
             group_uuid=eur.uuid,
             name="EURO uszkodzone",

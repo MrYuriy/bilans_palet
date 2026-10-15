@@ -24,6 +24,9 @@ class CarrierType(BaseModel, UUIDMixin, TimestampMixin):
     description = Column(String(255))
     # Order within the group (lists, report rows).
     sort_order = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    # The carrier's name in the Transplaner file (cell A1, e.g. "PAL EUR/ EPAL"):
+    # its shipments and returns are booked on this type.
+    transplaner_name = Column(String(100), unique=True)
     count_in_reports = Column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )

@@ -15,6 +15,7 @@ from app.routers.auth import router as auth_router
 from app.routers.balance import router as balance_router
 from app.routers.carrier_group import router as carrier_group_router
 from app.routers.carrier_type import router as carrier_type_router
+from app.routers.data_import import router as data_import_router
 from app.routers.holiday import router as holiday_router
 from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
@@ -78,6 +79,7 @@ app.include_router(carrier_group_router)
 app.include_router(carrier_type_router)
 app.include_router(movement_router)
 app.include_router(inventory_router)
+app.include_router(data_import_router)
 app.include_router(audit_router)
 app.include_router(setting_router)
 app.include_router(holiday_router)

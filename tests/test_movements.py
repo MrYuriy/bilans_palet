@@ -166,6 +166,15 @@ async def test_a_target_type_belongs_to_a_reclassification_only(
     assert response.json() == {"message": "Typ docelowy dotyczy tylko przeksięgowania"}
 
 
+async def test_a_file_operation_is_not_entered_by_hand(client, admin_headers, carriers):
+    response = await move(
+        client, admin_headers, "STORE_SHIPMENT", line(carriers.euro, 1)
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "„Wysyłka do sklepów” księguje się z pliku"}
+
+
 async def test_an_inventory_is_not_entered_as_a_movement(
     client, admin_headers, carriers
 ):
@@ -240,12 +249,22 @@ async def test_the_operations_say_who_may_enter_them(client, session, admin_head
         ("ECOM_TRANSFER", "Przesunięcie na ECOM", -1),
         ("OTHER_RECEIPT", "Inne — przyjęcie", 1),
         ("OTHER_SHIPMENT", "Inne — wydanie", -1),
+        ("STORE_SHIPMENT", "Wysyłka do sklepów", -1),
+        ("STORE_RETURN", "Zwroty ze sklepów", 1),
+        ("UKR_SHIPMENT", "Wysyłka UKR", -1),
+        ("UKR_RETURN", "Zwroty z UKR", 1),
         ("CORRECTION", "Korekta stanu", 0),
         ("RECLASSIFICATION", "Przeksięgowanie", 0),
         ("INVENTORY", "Inwentaryzacja", 0),
     ]
-    # The inventory has its own screen.
-    assert [t["code"] for t in admin_view if not t["can_enter"]] == ["INVENTORY"]
+    # The inventory has its own screen; the file operations come from the file.
+    assert [t["code"] for t in admin_view if not t["can_enter"]] == [
+        "STORE_SHIPMENT",
+        "STORE_RETURN",
+        "UKR_SHIPMENT",
+        "UKR_RETURN",
+        "INVENTORY",
+    ]
     assert not any(t["can_enter"] for t in viewer_view)
     receipt = admin_view[0]
     assert (receipt["counted_types_only"], receipt["note_required"]) == (True, False)

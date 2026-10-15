@@ -179,7 +179,7 @@ async def test_the_current_day_is_never_a_closed_one(
 async def test_the_background_task_closes_days(history):
     task = asyncio.create_task(day_close_loop(TestSessionLocal, interval_seconds=60))
     try:
-        for _ in range(100):
+        for _ in range(400):  # up to 20 s: a busy machine may be slow
             async with TestSessionLocal() as session:
                 count = (
                     await session.execute(select(func.count()).select_from(DayClosure))

@@ -52,6 +52,8 @@ CARRIERS = {
     ],
     "Jednorazowe": [("Jednorazowe", True)],
 }
+# Types whose numbers come from the Transplaner file, by its name there.
+TRANSPLANER_NAMES = {"EURO": "PAL EUR/ EPAL"}
 
 
 async def _is_empty(session: AsyncSession, model) -> bool:
@@ -79,6 +81,7 @@ async def seed_dictionaries(session: AsyncSession) -> list[str]:
                     name=name,
                     sort_order=order,
                     count_in_reports=counted,
+                    transplaner_name=TRANSPLANER_NAMES.get(name),
                 )
                 for order, (name, counted) in enumerate(types, start=1)
             )

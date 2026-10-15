@@ -25,6 +25,11 @@ class MovementType(StrEnum):
     ECOM_TRANSFER = "ECOM_TRANSFER"  # Przesunięcie na ECOM: -
     OTHER_RECEIPT = "OTHER_RECEIPT"  # Inne — przyjęcie: +
     OTHER_SHIPMENT = "OTHER_SHIPMENT"  # Inne — wydanie: -
+    # Booked from the Transplaner file, never entered by hand.
+    STORE_SHIPMENT = "STORE_SHIPMENT"  # Wysyłka do sklepów: -
+    STORE_RETURN = "STORE_RETURN"  # Zwroty ze sklepów: +
+    UKR_SHIPMENT = "UKR_SHIPMENT"  # Wysyłka UKR: -
+    UKR_RETURN = "UKR_RETURN"  # Zwroty z UKR: +
     CORRECTION = "CORRECTION"  # Korekta stanu: + or -
     RECLASSIFICATION = "RECLASSIFICATION"  # Przeksięgowanie: - from, + to
     INVENTORY = "INVENTORY"  # Inwentaryzacja: counted - system, with the count sheet
@@ -51,6 +56,12 @@ class Movement(BaseModel, UUIDMixin, TimestampMixin):
     operation_date = Column(Date, nullable=False, index=True)
     document_number = Column(String(100))
     comment = Column(Text)
+    # Set when the movement was booked by an import (Transplaner, Saldo Palet).
+    import_uuid = Column(
+        UUID(as_uuid=True),
+        ForeignKey("imports.uuid", ondelete="RESTRICT"),
+        index=True,
+    )
 
     user = relationship("User")
     lines = relationship(

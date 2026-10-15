@@ -31,6 +31,7 @@ class CarrierTypeCreate(BaseModel):
     description: str | None = None
     sort_order: int = 0
     count_in_reports: bool = True
+    transplaner_name: str | None = None
 
 
 class CarrierTypeUpdate(BaseModel):
@@ -39,6 +40,7 @@ class CarrierTypeUpdate(BaseModel):
     description: str | None = None
     sort_order: int | None = None
     count_in_reports: bool | None = None
+    transplaner_name: str | None = None
     is_active: bool | None = None
 
 
@@ -49,6 +51,8 @@ class CarrierTypeOut(BaseModel):
     description: str | None = None
     sort_order: int
     count_in_reports: bool
+    # Its name in the Transplaner file (cell A1), if its numbers come from there.
+    transplaner_name: str | None = None
     is_active: bool
 
     model_config = {"from_attributes": True}

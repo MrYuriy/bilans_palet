@@ -27,6 +27,9 @@ class Operation:
     note_required: bool = False
     # Only carrier types counted in reports, e.g. new EURO from a producer.
     counted_types_only: bool = False
+    # Booked by an import (a file, another app), never entered by hand; the
+    # module is then the one needed to run the import.
+    imported: bool = False
 
 
 # Permission modules.
@@ -74,6 +77,39 @@ OPERATIONS: dict[MovementType, Operation] = {
             SHIPMENTS,
             sign=-1,
             note_required=True,
+        ),
+        # From the Transplaner file. UKR is kept apart from the stores.
+        Operation(
+            MovementType.STORE_SHIPMENT,
+            "Wysyłka do sklepów",
+            OPERATIONS_MODULE,
+            SHIPMENTS,
+            sign=-1,
+            imported=True,
+        ),
+        Operation(
+            MovementType.STORE_RETURN,
+            "Zwroty ze sklepów",
+            OPERATIONS_MODULE,
+            RECEIPTS,
+            sign=1,
+            imported=True,
+        ),
+        Operation(
+            MovementType.UKR_SHIPMENT,
+            "Wysyłka UKR",
+            OPERATIONS_MODULE,
+            SHIPMENTS,
+            sign=-1,
+            imported=True,
+        ),
+        Operation(
+            MovementType.UKR_RETURN,
+            "Zwroty z UKR",
+            OPERATIONS_MODULE,
+            RECEIPTS,
+            sign=1,
+            imported=True,
         ),
         # Signed: each line says + or -.
         Operation(

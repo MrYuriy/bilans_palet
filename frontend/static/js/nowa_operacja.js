@@ -96,7 +96,10 @@ function renderTypes(types) {
   const chips = types.map(
     (t) => `<button type="button" class="chip" data-type="${t.code}">${esc(t.label)}</button>`
   );
-  // A stock count has its own sheet.
+  // The file operations and a stock count have their own screens.
+  if (App.can("operations")) {
+    chips.push('<a class="chip" href="/app/import">Wysyłka / zwroty — import z Transplanera</a>');
+  }
   if (App.can("inventory")) chips.push('<a class="chip" href="/app/inwentaryzacja">Inwentaryzacja</a>');
   $("types").innerHTML = chips.join("");
   $("types").querySelectorAll("button.chip").forEach((chip) => {

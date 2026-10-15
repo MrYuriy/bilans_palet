@@ -2,6 +2,7 @@ from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
+from app.models.data_import import DataImport, ImportDay
 from app.models.day_closure import DailyBalance, DayClosure
 from app.models.holiday import Holiday
 from app.models.inventory import InventoryLine
@@ -16,8 +17,10 @@ __all__ = [
     "CarrierGroup",
     "CarrierType",
     "DailyBalance",
+    "DataImport",
     "DayClosure",
     "Holiday",
+    "ImportDay",
     "InventoryLine",
     "Movement",
     "MovementLine",

@@ -1,0 +1,51 @@
+{% extends "app.html" %}
+
+{% block title %}Import z Transplanera — MONOLIT{% endblock %}
+{% block page %}import{% endblock %}
+{% block heading %}Import z Transplanera{% endblock %}
+{% block crumb %}<span id="day"></span>{% endblock %}
+
+{% block content %}
+<form class="card" id="import-form" novalidate>
+    <div class="hd"><h2>Plik raportu</h2>
+        <span class="sub">Raport rozliczeniowy nośników (.xlsx). Miesiąc i nośnik są czytane z pola A1 zakładek.</span></div>
+    <div class="pad col">
+        <div class="row" style="align-items:flex-end">
+            <div class="fld"><label for="file">Plik</label><input type="file" id="file" accept=".xlsx"></div>
+            <button type="button" id="check">Sprawdź plik</button>
+        </div>
+        <div class="fld"><label>Operacje do zaksięgowania</label>
+            <div class="tabs" id="kinds">
+                <label class="chip on"><input type="checkbox" value="STORE_SHIPMENT" checked hidden> Wysyłka do sklepów</label>
+                <label class="chip on"><input type="checkbox" value="STORE_RETURN" checked hidden> Zwroty ze sklepów</label>
+                <label class="chip on"><input type="checkbox" value="UKR_SHIPMENT" checked hidden> Wysyłka UKR</label>
+                <label class="chip on"><input type="checkbox" value="UKR_RETURN" checked hidden> Zwroty z UKR</label>
+            </div>
+        </div>
+        <p class="mut" style="margin:0;max-width:80ch">
+            Plik obejmuje cały miesiąc i można go wgrywać wielokrotnie: księgowana jest tylko różnica
+            względem wcześniejszych wgrań, z dzisiejszą datą. UKR jest liczony osobno od sklepów.
+        </p>
+        <div class="msg" id="msg"></div>
+    </div>
+</form>
+
+<div class="card hidden" id="preview-card">
+    <div class="hd"><h2 id="preview-title">Podgląd</h2><span class="sub" id="preview-sub"></span></div>
+    <div class="pad col" style="padding-bottom:0">
+        <div class="col" id="warnings"></div>
+    </div>
+    <div class="scroll"><table id="preview"></table></div>
+    <div class="pad row">
+        <button class="pri" type="button" id="book">Zaksięguj</button>
+        <span class="msg" id="book-msg"></span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="hd"><h2>Ostatnie wgrania</h2></div>
+    <div class="scroll"><table id="history"></table></div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}<script src="/static/js/import.js?v={{ asset_version }}"></script>{% endblock %}

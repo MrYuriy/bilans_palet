@@ -106,6 +106,7 @@ async def test_carrier_types_are_logged(client, admin_headers):
         "description": None,
         "sort_order": 0,
         "count_in_reports": True,
+        "transplaner_name": None,
         "is_active": True,
     }
 

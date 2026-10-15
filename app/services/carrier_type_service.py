@@ -1,7 +1,11 @@
 from typing import Any
 from uuid import UUID
 
-from app.core.exc import BadRequestException, ObjectNotFoundException
+from app.core.exc import (
+    BadRequestException,
+    ObjectAlreadyExistsException,
+    ObjectNotFoundException,
+)
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
 from app.models.day_closure import DailyBalance
@@ -38,6 +42,18 @@ class CarrierTypeService(DictionaryService[CarrierType]):
         return row
 
     async def _validate(self, data: dict[str, Any], current: CarrierType | None):
+        if "transplaner_name" in data:
+            name = (data["transplaner_name"] or "").strip() or None
+            data["transplaner_name"] = name
+            if name is not None and (
+                current is None or name != current.transplaner_name
+            ):
+                taken = await self.repo.get_one(transplaner_name=name)
+                if taken is not None:
+                    raise ObjectAlreadyExistsException(
+                        f"Nazwa „{name}” z Transplanera jest już przypisana"
+                        f" do „{taken.name}”"
+                    )
         if "group_uuid" in data and data["group_uuid"] is None:
             del data["group_uuid"]
         group_uuid = data.get("group_uuid")
