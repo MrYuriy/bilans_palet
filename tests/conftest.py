@@ -7,6 +7,9 @@ from datetime import date
 # The real database is never used: get_session is overridden with SQLite below.
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
+# Never reach the real Saldo Palet from a test, whatever the local .env says;
+# tests that need it put a fake client in place.
+os.environ["SALDO_PALET_URL"] = ""
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
