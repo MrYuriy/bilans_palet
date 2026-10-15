@@ -21,9 +21,11 @@ from app.routers.inventory import router as inventory_router
 from app.routers.movement import router as movement_router
 from app.routers.pages import STATIC_DIR
 from app.routers.pages import router as pages_router
+from app.routers.reminder import router as reminder_router
 from app.routers.setting import router as setting_router
 from app.routers.users import router as users_router
 from app.services.day_close_service import day_close_loop
+from app.services.reminder_service import reminders_loop
 from app.services.saldo_palet_import_service import saldo_palet_loop
 
 # Without this the app's own INFO messages (requests, closed days) are dropped:
@@ -48,6 +50,7 @@ async def lifespan(app: FastAPI):
         )
         # Same process as the day closing, so it runs once too.
         tasks.append(asyncio.create_task(saldo_palet_loop(AsyncSessionLocal)))
+        tasks.append(asyncio.create_task(reminders_loop(AsyncSessionLocal)))
     logger.info("Application started")
     yield
     for task in tasks:
@@ -90,6 +93,7 @@ app.include_router(data_import_router)
 app.include_router(audit_router)
 app.include_router(setting_router)
 app.include_router(holiday_router)
+app.include_router(reminder_router)
 app.include_router(balance_router)
 app.include_router(pages_router)
 

@@ -12,6 +12,7 @@ Idempotent: re-running will not create duplicates.
 import asyncio
 import os
 import secrets
+from datetime import time
 
 from dotenv import load_dotenv
 from sqlalchemy import func, select
@@ -23,6 +24,7 @@ from app.core.timeutils import local_now
 from app.models.carrier_group import CarrierGroup
 from app.models.carrier_type import CarrierType
 from app.models.holiday import Holiday
+from app.models.reminder import Reminder
 from app.models.role import Role
 from app.models.user import User
 from app.services.holiday_service import HolidayService
@@ -109,6 +111,26 @@ async def seed_holidays(session: AsyncSession) -> list[int]:
     for each in (year, year + 1):
         await service.add_public(None, each)
     return [year, year + 1]
+
+
+# The manager's checks: (name, what is checked, deadline). Recipients are
+# added by the admin.
+REMINDERS = [
+    ("Przyjęcia z Salda Palet", "saldo_palet", time(8, 0)),
+    ("Wysyłka i zwroty z Transplanera", "transplaner", time(12, 30)),
+]
+
+
+async def seed_reminders(session: AsyncSession) -> bool:
+    """Fill the starting reminders while there are none."""
+    if not await _is_empty(session, Reminder):
+        return False
+    session.add_all(
+        Reminder(name=name, check=check, deadline=deadline, recipients=[])
+        for name, check, deadline in REMINDERS
+    )
+    await session.flush()
+    return True
 
 
 async def seed_system_user(session: AsyncSession, role: Role) -> bool:
@@ -203,6 +225,11 @@ async def seed() -> None:
 
         if await seed_system_user(session, roles["viewer"]):
             print("Created the system user (author of automatic imports).")
+
+        if await seed_reminders(session):
+            print(
+                "Filled the starting reminders (add their recipients in the settings)."
+            )
 
         years = await seed_holidays(session)
         if years:

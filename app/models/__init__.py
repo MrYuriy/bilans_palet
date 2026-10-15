@@ -7,6 +7,7 @@ from app.models.day_closure import DailyBalance, DayClosure
 from app.models.holiday import Holiday
 from app.models.inventory import InventoryLine
 from app.models.movement import Movement, MovementLine, MovementType
+from app.models.reminder import Reminder
 from app.models.role import Role
 from app.models.setting import SystemSettings
 from app.models.user import User
@@ -25,6 +26,7 @@ __all__ = [
     "Movement",
     "MovementLine",
     "MovementType",
+    "Reminder",
     "Role",
     "SystemSettings",
     "User",

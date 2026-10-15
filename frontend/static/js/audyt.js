@@ -15,6 +15,13 @@ const FIELD_LABELS = {
   must_change_password: "Wymagana zmiana hasła",
   group: "Grupa",
   count_in_reports: "Liczony w raportach",
+  transplaner_name: "Nazwa w Transplanerze",
+  saldo_palet_unit: "Jednostka w Saldzie Palet",
+  check: "Co sprawdzamy",
+  movement_type: "Operacja",
+  deadline: "Godzina",
+  recipients: "Odbiorcy",
+  day: "Dzień",
   areas: "Obszary", // older entries
   password_changed: "Hasło",
   day_cutoff: "Godzina zamknięcia doby",

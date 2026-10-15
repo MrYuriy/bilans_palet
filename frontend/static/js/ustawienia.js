@@ -34,6 +34,9 @@ function showTab(tab) {
   } else if (tab === "users") {
     document.querySelector('[data-panel="users"]').classList.remove("hidden");
     loadUsers();
+  } else if (tab === "reminders") {
+    document.querySelector('[data-panel="reminders"]').classList.remove("hidden");
+    loadReminders();
   } else if (tab === "holidays") {
     document.querySelector('[data-panel="holidays"]').classList.remove("hidden");
     openHolidays();
@@ -61,6 +64,126 @@ $("day-form").addEventListener("submit", async (e) => {
     await loadDay();
   } catch (err) {
     setMsg($("day-msg"), err.message);
+  }
+});
+
+// ---------- reminders ----------
+
+let reminders = [];
+let editedReminder = null; // null = creating
+let operationTypes = [];
+
+async function loadReminders() {
+  const [status, rows, types] = await Promise.all([
+    api("/reminders/status"),
+    api("/reminders"),
+    operationTypes.length ? Promise.resolve(operationTypes) : api("/movements/types"),
+  ]);
+  operationTypes = types;
+  reminders = rows;
+  $("r-check").innerHTML = Object.entries(status.checks)
+    .map(([code, label]) => `<option value="${code}">${esc(label)}</option>`)
+    .join("");
+  $("r-type").innerHTML = operationTypes
+    .filter((t) => t.code !== "INVENTORY")
+    .map((t) => `<option value="${t.code}">${esc(t.label)}</option>`)
+    .join("");
+  $("r-status").innerHTML =
+    (status.smtp_configured
+      ? `<span class="bg ok">Poczta: ${esc(status.sender)}</span>`
+      : '<span class="bg wr">Poczta nie jest skonfigurowana (SMTP w .env) — e-maile nie wychodzą</span>') +
+    (status.working_day_today
+      ? '<span class="bg nu">Dziś dzień roboczy</span>'
+      : '<span class="bg nu">Dziś dzień wolny — bez powiadomień</span>');
+
+  $("r-table").innerHTML = rows.length
+    ? `<thead><tr><th>Godzina</th><th>Nazwa</th><th>Co sprawdzamy</th><th>Odbiorcy</th>
+        <th>Ostatnio wysłano</th><th>Status</th><th></th></tr></thead>
+       <tbody>${rows
+         .map(
+           (r) => `<tr data-uuid="${r.uuid}">
+             <td class="strong">${r.deadline}</td>
+             <td>${esc(r.name)}</td>
+             <td class="mut">${esc(r.description)}</td>
+             <td>${r.recipients.length ? r.recipients.map(esc).join("<br>") : '<span class="bg wr">brak odbiorców</span>'}</td>
+             <td class="mut">${r.last_sent_on ? fmtDate(r.last_sent_on) : "—"}</td>
+             <td>${r.is_active ? '<span class="bg ok">Aktywne</span>' : '<span class="bg nu">Wyłączone</span>'}</td>
+             <td class="row" style="justify-content:flex-end">
+               <button class="sm r-edit">Zmień</button>
+               <button class="sm r-test">Test</button>
+               <button class="sm danger r-delete">Usuń</button>
+             </td>
+           </tr>`
+         )
+         .join("")}</tbody>`
+    : `<tbody><tr><td class="empty">Brak powiadomień</td></tr></tbody>`;
+
+  $("r-table").querySelectorAll("tbody tr[data-uuid]").forEach((tr) => {
+    const row = rows.find((r) => r.uuid === tr.dataset.uuid);
+    tr.querySelector(".r-edit").onclick = () => openReminder(row);
+    tr.querySelector(".r-test").onclick = async () => {
+      try {
+        await api(`/reminders/${row.uuid}/test`, { method: "POST" });
+        setMsg($("r-msg"), `Wysłano wiadomość testową: ${row.recipients.join(", ")}`, "success");
+      } catch (err) {
+        setMsg($("r-msg"), err.message);
+      }
+    };
+    tr.querySelector(".r-delete").onclick = async () => {
+      if (!confirm(`Usunąć powiadomienie „${row.name}”?`)) return;
+      try {
+        await api(`/reminders/${row.uuid}`, { method: "DELETE" });
+        setMsg($("r-msg"), `Usunięto „${row.name}”`, "success");
+        await loadReminders();
+      } catch (err) {
+        setMsg($("r-msg"), err.message);
+      }
+    };
+  });
+}
+
+function showTypeField() {
+  $("r-type-field").classList.toggle("hidden", $("r-check").value !== "movement");
+}
+
+function openReminder(row) {
+  editedReminder = row;
+  $("r-title").textContent = row ? `Edycja: ${row.name}` : "Nowe powiadomienie";
+  $("r-name").value = row ? row.name : "";
+  $("r-deadline").value = row ? row.deadline : "12:00";
+  $("r-check").value = row ? row.check : "transplaner";
+  if (row && row.movement_type) $("r-type").value = row.movement_type;
+  $("r-recipients").value = row ? row.recipients.join("\n") : "";
+  $("r-active").checked = row ? row.is_active : true;
+  showTypeField();
+  setMsg($("r-form-msg"), "");
+  $("r-dialog").showModal();
+}
+
+$("r-check").onchange = showTypeField;
+$("r-new").onclick = () => openReminder(null);
+$("r-cancel").onclick = () => $("r-dialog").close();
+$("r-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    name: $("r-name").value,
+    deadline: $("r-deadline").value,
+    check: $("r-check").value,
+    movement_type: $("r-check").value === "movement" ? $("r-type").value : null,
+    recipients: $("r-recipients").value.split(/[\n,;]+/).map((a) => a.trim()).filter(Boolean),
+    is_active: $("r-active").checked,
+  };
+  try {
+    if (editedReminder) {
+      await api(`/reminders/${editedReminder.uuid}`, { method: "PUT", body });
+    } else {
+      await api("/reminders", { method: "POST", body });
+    }
+    $("r-dialog").close();
+    setMsg($("r-msg"), "Zapisano", "success");
+    await loadReminders();
+  } catch (err) {
+    setMsg($("r-form-msg"), err.message);
   }
 });
 

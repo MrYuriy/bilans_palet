@@ -10,6 +10,8 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 # Never reach the real Saldo Palet from a test, whatever the local .env says;
 # tests that need it put a fake client in place.
 os.environ["SALDO_PALET_URL"] = ""
+# ... and never send real mail.
+os.environ["SMTP_HOST"] = ""
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient

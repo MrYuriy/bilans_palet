@@ -8,6 +8,7 @@
 <div class="tabs" id="tabs">
     <button class="chip hidden" data-tab="day" data-module="settings">Doba robocza</button>
     <button class="chip hidden" data-tab="holidays" data-module="settings">Dni wolne</button>
+    <button class="chip hidden" data-tab="reminders" data-module="settings">Powiadomienia</button>
     <button class="chip hidden" data-tab="carrier-groups" data-module="masterdata">Grupy nośników</button>
     <button class="chip hidden" data-tab="carrier-types" data-module="masterdata">Typy nośników</button>
     <button class="chip hidden" data-tab="users" data-module="users">Użytkownicy</button>
@@ -49,6 +50,37 @@
     <div class="msg pad" id="h-msg" style="padding-top:0"></div>
     <div class="scroll"><table id="h-table"></table></div>
 </section>
+
+<!-- Reminders -->
+<section class="card hidden" data-panel="reminders">
+    <div class="hd"><h2>Powiadomienia</h2>
+        <span class="sub">Jeśli do podanej godziny dnia roboczego zadanie nie zostanie wykonane, odbiorcy dostaną e-mail (raz dziennie).</span>
+        <span class="sp"></span>
+        <button class="sm pri" id="r-new">+ Nowe powiadomienie</button></div>
+    <div class="pad row" style="padding-bottom:0" id="r-status"></div>
+    <div class="msg pad" id="r-msg" style="padding-bottom:0"></div>
+    <div class="scroll"><table id="r-table"></table></div>
+</section>
+
+<dialog class="card detail" id="r-dialog">
+    <form id="r-form">
+        <div class="hd"><h2 id="r-title"></h2><span class="sp"></span>
+            <button type="button" class="sm" id="r-cancel">Anuluj</button></div>
+        <div class="pad col">
+            <div class="grid2">
+                <div class="fld"><label for="r-name">Nazwa</label><input id="r-name" required></div>
+                <div class="fld"><label for="r-deadline">Godzina</label><input type="time" id="r-deadline" required></div>
+                <div class="fld"><label for="r-check">Co sprawdzamy</label><select id="r-check"></select></div>
+                <div class="fld hidden" id="r-type-field"><label for="r-type">Operacja</label><select id="r-type"></select></div>
+            </div>
+            <div class="fld"><label for="r-recipients">Odbiorcy (adres e-mail w każdej linii)</label>
+                <textarea id="r-recipients" rows="4" placeholder="kierownik@firma.pl"></textarea></div>
+            <label class="row" style="text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:400">
+                <input type="checkbox" id="r-active" checked> aktywne</label>
+            <div class="row"><button class="pri" type="submit">Zapisz</button><span class="msg" id="r-form-msg"></span></div>
+        </div>
+    </form>
+</dialog>
 
 <!-- Dictionaries (one editor for every dictionary) -->
 <section class="card hidden" data-panel="dictionary">

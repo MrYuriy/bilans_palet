@@ -21,6 +21,7 @@ ENTITY_LABELS = {
     "carrier_group": "Grupa nośników",
     "carrier_type": "Typ nośnika",
     "holiday": "Dzień wolny",
+    "reminder": "Powiadomienie",
     "settings": "Ustawienia",
 }
 

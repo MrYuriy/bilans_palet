@@ -27,3 +27,12 @@ class AppConfig(BaseConfig):
     SALDO_PALET_IMPORT_AT: str = "05:00"
     # Days missed while the app was down that are still caught up.
     SALDO_PALET_CATCH_UP_DAYS: int = 7
+    # Reminder mails (SMTP). Empty host = no mail is sent.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+    # The app's address, put into the mails.
+    APP_URL: str = ""
