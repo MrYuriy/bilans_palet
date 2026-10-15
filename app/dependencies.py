@@ -6,12 +6,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exc import ForbiddenException, UnauthorizedException
+from app.core.exc import (
+    BadRequestException,
+    ForbiddenException,
+    UnauthorizedException,
+)
 from app.core.jwt import decode_access_token
 from app.database.session import get_session
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
 from app.services.permission_service import PermissionService
+from app.services.saldo_palet_client import SaldoPaletClient, configured_client
 
 # auto_error=False: a missing token is reported by us, in Polish.
 security = HTTPBearer(auto_error=False)
@@ -67,3 +72,13 @@ SettingsAdmin = Annotated[User, Depends(require_permission("settings"))]
 
 # Changing dictionaries (carrier groups and types) — admin only.
 MasterdataAdmin = Annotated[User, Depends(require_permission("masterdata"))]
+
+
+def get_saldo_palet_client() -> SaldoPaletClient:
+    client = configured_client()
+    if client is None:
+        raise BadRequestException("Połączenie z Saldem Palet nie jest skonfigurowane")
+    return client
+
+
+SaldoPaletClientDep = Annotated[SaldoPaletClient, Depends(get_saldo_palet_client)]

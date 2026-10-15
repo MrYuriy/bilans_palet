@@ -179,7 +179,7 @@ async function loadDictionary() {
   const { ordered, grouped, counted, transplaner } = dict;
   $("dict-table").innerHTML = rows.length
     ? `<thead><tr>${grouped ? "<th>Grupa</th>" : ""}<th>Nazwa</th>${ordered ? '<th class="num">Kolejność</th>' : ""}<th>Opis</th>
-        ${counted ? "<th>Raporty</th>" : ""}${transplaner ? "<th>Nazwa w Transplanerze</th>" : ""}<th>Status</th><th></th></tr></thead>
+        ${counted ? "<th>Raporty</th>" : ""}${transplaner ? "<th>Nazwa w Transplanerze</th><th>Jednostka w Saldzie Palet</th>" : ""}<th>Status</th><th></th></tr></thead>
        <tbody>${rows
          .map(
            (r) => `<tr data-uuid="${r.uuid}">
@@ -188,7 +188,7 @@ async function loadDictionary() {
              ${ordered ? `<td class="num">${r.sort_order}</td>` : ""}
              <td>${esc(r.description || "")}</td>
              ${counted ? `<td>${r.count_in_reports ? '<span class="bg ok">W raportach</span>' : '<span class="bg nu">Ukryty</span>'}</td>` : ""}
-             ${transplaner ? `<td class="mut">${esc(r.transplaner_name || "—")}</td>` : ""}
+             ${transplaner ? `<td class="mut">${esc(r.transplaner_name || "—")}</td><td class="mut">${esc(r.saldo_palet_unit || "—")}</td>` : ""}
              <td>${r.is_active ? '<span class="bg ok">Aktywny</span>' : '<span class="bg nu">Nieaktywny</span>'}</td>
              <td class="row" style="justify-content:flex-end">
                <button class="sm d-edit">Zmień</button>
@@ -225,7 +225,8 @@ function editDictionaryRow(tr, row) {
     ${ordered ? `<td class="num"><input class="num-in e-order" type="number" min="${dict.orderMin}" value="${row.sort_order}"></td>` : ""}
     <td><input class="e-description" value="${esc(row.description || "")}"></td>
     ${counted ? `<td><label class="row"><input type="checkbox" class="e-counted" ${row.count_in_reports ? "checked" : ""}> w raportach</label></td>` : ""}
-    ${transplaner ? `<td><input class="e-transplaner" value="${esc(row.transplaner_name || "")}" placeholder="np. PAL EUR/ EPAL"></td>` : ""}
+    ${transplaner ? `<td><input class="e-transplaner" value="${esc(row.transplaner_name || "")}" placeholder="np. PAL EUR/ EPAL"></td>
+      <td><input class="e-saldo" value="${esc(row.saldo_palet_unit || "")}" placeholder="np. EUR"></td>` : ""}
     <td></td>
     <td class="row" style="justify-content:flex-end">
       <button class="sm pri e-save">Zapisz</button><button class="sm e-cancel">Anuluj</button>
@@ -239,7 +240,10 @@ function editDictionaryRow(tr, row) {
     if (ordered) changes.sort_order = parseInt(tr.querySelector(".e-order").value, 10);
     if (grouped) changes.group_uuid = tr.querySelector(".e-group").value;
     if (counted) changes.count_in_reports = tr.querySelector(".e-counted").checked;
-    if (transplaner) changes.transplaner_name = tr.querySelector(".e-transplaner").value;
+    if (transplaner) {
+      changes.transplaner_name = tr.querySelector(".e-transplaner").value;
+      changes.saldo_palet_unit = tr.querySelector(".e-saldo").value;
+    }
     saveDictionaryRow(row, changes);
   };
 }

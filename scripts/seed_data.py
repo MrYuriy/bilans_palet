@@ -54,6 +54,12 @@ CARRIERS = {
 }
 # Types whose numbers come from the Transplaner file, by its name there.
 TRANSPLANER_NAMES = {"EURO": "PAL EUR/ EPAL"}
+# Types whose deliveries come from Saldo Palet, by its unit there.
+SALDO_PALET_UNITS = {
+    "EURO": "EUR",
+    "EURO uszkodzone": "euro uszkodzone",
+    "Jednorazowe": "jednorazowe",
+}
 
 
 async def _is_empty(session: AsyncSession, model) -> bool:
@@ -82,6 +88,7 @@ async def seed_dictionaries(session: AsyncSession) -> list[str]:
                     sort_order=order,
                     count_in_reports=counted,
                     transplaner_name=TRANSPLANER_NAMES.get(name),
+                    saldo_palet_unit=SALDO_PALET_UNITS.get(name),
                 )
                 for order, (name, counted) in enumerate(types, start=1)
             )
@@ -102,6 +109,24 @@ async def seed_holidays(session: AsyncSession) -> list[int]:
     for each in (year, year + 1):
         await service.add_public(None, each)
     return [year, year + 1]
+
+
+async def seed_system_user(session: AsyncSession, role: Role) -> bool:
+    """The author of the automatic imports. Inactive with a random password, so
+    nobody signs in as it. Returns True when it was created."""
+    exists = await session.execute(select(User).where(User.username == "system"))
+    if exists.scalar_one_or_none() is not None:
+        return False
+    session.add(
+        User(
+            username="system",
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+            role_uuid=role.uuid,
+            is_active=False,
+        )
+    )
+    await session.flush()
+    return True
 
 
 async def seed_first_admin(
@@ -175,6 +200,9 @@ async def seed() -> None:
             print("Save it now - it will NOT be shown again.")
         else:
             print(f"Created admin user '{ADMIN_USERNAME}'.")
+
+        if await seed_system_user(session, roles["viewer"]):
+            print("Created the system user (author of automatic imports).")
 
         years = await seed_holidays(session)
         if years:

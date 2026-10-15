@@ -253,6 +253,7 @@ async def test_the_operations_say_who_may_enter_them(client, session, admin_head
         ("STORE_RETURN", "Zwroty ze sklepów", 1),
         ("UKR_SHIPMENT", "Wysyłka UKR", -1),
         ("UKR_RETURN", "Zwroty z UKR", 1),
+        ("SALDO_RECEIPT", "Przyjęcia (Saldo Palet)", 1),
         ("CORRECTION", "Korekta stanu", 0),
         ("RECLASSIFICATION", "Przeksięgowanie", 0),
         ("INVENTORY", "Inwentaryzacja", 0),
@@ -263,6 +264,7 @@ async def test_the_operations_say_who_may_enter_them(client, session, admin_head
         "STORE_RETURN",
         "UKR_SHIPMENT",
         "UKR_RETURN",
+        "SALDO_RECEIPT",
         "INVENTORY",
     ]
     assert not any(t["can_enter"] for t in viewer_view)

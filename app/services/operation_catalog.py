@@ -111,6 +111,16 @@ OPERATIONS: dict[MovementType, Operation] = {
             sign=1,
             imported=True,
         ),
+        # From Saldo Palet: one line per carrier type, the day's net (it may be
+        # negative when more pallets went back to suppliers than came in).
+        Operation(
+            MovementType.SALDO_RECEIPT,
+            "Przyjęcia (Saldo Palet)",
+            OPERATIONS_MODULE,
+            RECEIPTS,
+            sign=1,
+            imported=True,
+        ),
         # Signed: each line says + or -.
         Operation(
             MovementType.CORRECTION,

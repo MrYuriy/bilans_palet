@@ -1,13 +1,13 @@
 {% extends "app.html" %}
 
-{% block title %}Import z Transplanera — MONOLIT{% endblock %}
+{% block title %}Importy — MONOLIT{% endblock %}
 {% block page %}import{% endblock %}
-{% block heading %}Import z Transplanera{% endblock %}
+{% block heading %}Importy{% endblock %}
 {% block crumb %}<span id="day"></span>{% endblock %}
 
 {% block content %}
 <form class="card" id="import-form" novalidate>
-    <div class="hd"><h2>Plik raportu</h2>
+    <div class="hd"><h2>Transplaner — plik raportu</h2>
         <span class="sub">Raport rozliczeniowy nośników (.xlsx). Miesiąc i nośnik są czytane z pola A1 zakładek.</span></div>
     <div class="pad col">
         <div class="row" style="align-items:flex-end">
@@ -43,8 +43,20 @@
 </div>
 
 <div class="card">
-    <div class="hd"><h2>Ostatnie wgrania</h2></div>
+    <div class="hd"><h2>Transplaner — ostatnie wgrania</h2></div>
     <div class="scroll"><table id="history"></table></div>
+</div>
+
+<div class="card">
+    <div class="hd"><h2>Saldo Palet</h2>
+        <span class="sub">Dostawy z dnia poprzedniego pobierane co rano automatycznie.
+            IN dodaje, OUT odejmuje, korekta liczy się odwrotnie.</span></div>
+    <div class="pad row" style="align-items:flex-end">
+        <div class="fld"><label for="saldo-day">Dzień (data dodania)</label><input type="date" id="saldo-day"></div>
+        <button type="button" id="saldo-run">Pobierz teraz</button>
+        <span class="msg" id="saldo-msg"></span>
+    </div>
+    <div class="scroll"><table id="saldo-history"></table></div>
 </div>
 {% endblock %}
 

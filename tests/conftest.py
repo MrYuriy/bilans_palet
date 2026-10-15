@@ -184,12 +184,14 @@ async def carriers(session) -> Carriers:
             name="EURO",
             sort_order=1,
             transplaner_name="PAL EUR/ EPAL",
+            saldo_palet_unit="EUR",
         ),
         "damaged": CarrierType(
             group_uuid=eur.uuid,
             name="EURO uszkodzone",
             sort_order=2,
             count_in_reports=False,
+            saldo_palet_unit="euro uszkodzone",
         ),
         "scrap": CarrierType(
             group_uuid=eur.uuid,

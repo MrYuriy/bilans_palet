@@ -18,3 +18,12 @@ class AppConfig(BaseConfig):
     DAY_CLOSE_ENABLED: bool = True
     DAY_CLOSE_INTERVAL_SECONDS: int = 60
     LOG_LEVEL: str = "INFO"
+    # Saldo Palet (deliveries of the day before, read every morning). Empty URL
+    # = off. The account needs the "reports" permission there (a viewer).
+    SALDO_PALET_URL: str = ""
+    SALDO_PALET_USERNAME: str = ""
+    SALDO_PALET_PASSWORD: str = ""
+    # Local time after which yesterday is imported.
+    SALDO_PALET_IMPORT_AT: str = "05:00"
+    # Days missed while the app was down that are still caught up.
+    SALDO_PALET_CATCH_UP_DAYS: int = 7

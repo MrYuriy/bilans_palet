@@ -1,5 +1,6 @@
-// Import z Transplanera: check the file (a preview books nothing), then book
-// the chosen operations. Only what changed since earlier uploads is booked.
+// Importy. Transplaner: check the file (a preview books nothing), then book the
+// chosen operations; only what changed since earlier uploads is booked.
+// Saldo Palet: imported every morning by itself; a day can be fetched by hand.
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,6 +92,29 @@ async function loadHistory() {
     : `<tbody><tr><td class="empty">Jeszcze nic nie wgrano</td></tr></tbody>`;
 }
 
+async function loadSaldoHistory() {
+  const rows = await api("/imports/saldo-palet", { query: { limit: 10 } });
+  $("saldo-history").innerHTML = rows.length
+    ? `<thead><tr><th>Pobrano</th><th>Dzień</th><th>Transakcje</th><th>Zmiany stanu</th><th>Kto</th></tr></thead>
+       <tbody>${rows
+         .map((r) => {
+           const s = r.summary || { types: {} };
+           const changes = Object.entries(s.types || {})
+             .filter(([, v]) => v.change)
+             .map(([name, v]) => `${esc(name)} ${signed(v.change)}`)
+             .join(", ");
+           return `<tr>
+             <td class="mut">${fmtDateTime(r.created_at)}</td>
+             <td>${fmtDate(s.day)}</td>
+             <td class="num">${fmt(s.transactions || 0)}</td>
+             <td>${changes || '<span class="mut">0</span>'}</td>
+             <td class="mut">${esc(r.user.username)}</td>
+           </tr>`;
+         })
+         .join("")}</tbody>`
+    : `<tbody><tr><td class="empty">Jeszcze nic nie pobrano</td></tr></tbody>`;
+}
+
 async function check() {
   setMsg($("msg"), "");
   setMsg($("book-msg"), "");
@@ -139,5 +163,33 @@ async function check() {
       $("book").disabled = false;
     }
   };
-  await loadHistory();
+  const yesterday = new Date(settings.current_day + "T12:00:00");
+  yesterday.setDate(yesterday.getDate() - 1);
+  $("saldo-day").value = yesterday.toISOString().slice(0, 10);
+  $("saldo-day").max = $("saldo-day").value;
+  $("saldo-run").onclick = async () => {
+    $("saldo-run").disabled = true;
+    setMsg($("saldo-msg"), "");
+    try {
+      const result = await api("/imports/saldo-palet", {
+        method: "POST",
+        query: { day: $("saldo-day").value },
+      });
+      const changes = Object.entries(result.summary.types).filter(([, v]) => v.change);
+      setMsg(
+        $("saldo-msg"),
+        changes.length
+          ? "Zaksięgowano: " + changes.map(([n, v]) => `${n} ${v.change > 0 ? "+" : ""}${fmt(v.change)}`).join(", ")
+          : "Pobrano — bez zmian stanu",
+        "success"
+      );
+      await loadSaldoHistory();
+    } catch (err) {
+      setMsg($("saldo-msg"), err.message);
+    } finally {
+      $("saldo-run").disabled = false;
+    }
+  };
+
+  await Promise.all([loadHistory(), loadSaldoHistory()]);
 })();

@@ -27,6 +27,9 @@ class CarrierType(BaseModel, UUIDMixin, TimestampMixin):
     # The carrier's name in the Transplaner file (cell A1, e.g. "PAL EUR/ EPAL"):
     # its shipments and returns are booked on this type.
     transplaner_name = Column(String(100), unique=True)
+    # The unit in Saldo Palet (e.g. "EUR") whose transactions are booked on
+    # this type; matched without regard to letter case.
+    saldo_palet_unit = Column(String(100), unique=True)
     count_in_reports = Column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )

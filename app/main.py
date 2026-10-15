@@ -24,6 +24,7 @@ from app.routers.pages import router as pages_router
 from app.routers.setting import router as setting_router
 from app.routers.users import router as users_router
 from app.services.day_close_service import day_close_loop
+from app.services.saldo_palet_import_service import saldo_palet_loop
 
 # Without this the app's own INFO messages (requests, closed days) are dropped:
 # uvicorn configures only its own loggers.
@@ -36,17 +37,23 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    day_close = None
+    tasks = []
     if settings.app.DAY_CLOSE_ENABLED:
-        day_close = asyncio.create_task(
-            day_close_loop(AsyncSessionLocal, settings.app.DAY_CLOSE_INTERVAL_SECONDS)
+        tasks.append(
+            asyncio.create_task(
+                day_close_loop(
+                    AsyncSessionLocal, settings.app.DAY_CLOSE_INTERVAL_SECONDS
+                )
+            )
         )
+        # Same process as the day closing, so it runs once too.
+        tasks.append(asyncio.create_task(saldo_palet_loop(AsyncSessionLocal)))
     logger.info("Application started")
     yield
-    if day_close is not None:
-        day_close.cancel()
+    for task in tasks:
+        task.cancel()
         with suppress(asyncio.CancelledError):
-            await day_close
+            await task
     logger.info("Application stopped")
 
 

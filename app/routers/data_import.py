@@ -1,10 +1,13 @@
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile
 
-from app.dependencies import CurrentUserDep, SessionDep
+from app.core.timeutils import local_now
+from app.dependencies import CurrentUserDep, SaldoPaletClientDep, SessionDep
 from app.models.movement import MovementType
 from app.schemas.data_import import ImportOut, TransplanerPreviewOut
+from app.services.saldo_palet_import_service import SaldoPaletImportService
 from app.services.transplaner_import_service import (
     MAX_FILE_BYTES,
     TransplanerImportService,
@@ -53,3 +56,31 @@ async def list_transplaner_imports(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     return await TransplanerImportService(session).recent(limit)
+
+
+@router.post("/saldo-palet", response_model=ImportOut)
+async def import_saldo_palet(
+    session: SessionDep,
+    user: CurrentUserDep,
+    client: SaldoPaletClientDep,
+    day: date | None = None,
+):
+    """Import a day from Saldo Palet now (by default yesterday); the morning
+    import does this by itself. A day imported again books only what changed."""
+    service = SaldoPaletImportService(session, client)
+    service.check_allowed(user)
+    result = await service.import_day(
+        user, day or local_now().date() - timedelta(days=1)
+    )
+    await session.commit()
+    return result
+
+
+@router.get("/saldo-palet", response_model=list[ImportOut])
+async def list_saldo_palet_imports(
+    session: SessionDep,
+    _: CurrentUserDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    # The client is not needed to read the history.
+    return await SaldoPaletImportService(session, None).recent(limit)

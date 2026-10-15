@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from app.models.carrier_group import CarrierGroup
@@ -25,6 +25,12 @@ class CarrierTypeRepository(BaseRepository[CarrierType]):
         if active is not None:
             query = query.where(CarrierType.is_active == active)
         return list((await self.session.execute(query)).scalars().all())
+
+    async def get_by_saldo_palet_unit(self, unit: str) -> CarrierType | None:
+        query = select(CarrierType).where(
+            func.lower(CarrierType.saldo_palet_unit) == unit.strip().lower()
+        )
+        return (await self.session.execute(query)).scalar_one_or_none()
 
     async def get_with_group(self, type_uuid: UUID) -> CarrierType | None:
         # populate_existing: after update_one the group relationship has expired.

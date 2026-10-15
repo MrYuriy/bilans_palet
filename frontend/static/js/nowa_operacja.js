@@ -98,7 +98,7 @@ function renderTypes(types) {
   );
   // The file operations and a stock count have their own screens.
   if (App.can("operations")) {
-    chips.push('<a class="chip" href="/app/import">Wysyłka / zwroty — import z Transplanera</a>');
+    chips.push('<a class="chip" href="/app/import">Wysyłka / zwroty / Saldo Palet — importy</a>');
   }
   if (App.can("inventory")) chips.push('<a class="chip" href="/app/inwentaryzacja">Inwentaryzacja</a>');
   $("types").innerHTML = chips.join("");

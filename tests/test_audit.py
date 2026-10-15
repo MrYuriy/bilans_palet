@@ -107,6 +107,7 @@ async def test_carrier_types_are_logged(client, admin_headers):
         "sort_order": 0,
         "count_in_reports": True,
         "transplaner_name": None,
+        "saldo_palet_unit": None,
         "is_active": True,
     }
 

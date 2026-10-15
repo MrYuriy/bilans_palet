@@ -42,6 +42,21 @@ class CarrierTypeService(DictionaryService[CarrierType]):
         return row
 
     async def _validate(self, data: dict[str, Any], current: CarrierType | None):
+        if "saldo_palet_unit" in data:
+            unit = (data["saldo_palet_unit"] or "").strip() or None
+            data["saldo_palet_unit"] = unit
+            if unit is not None and (
+                current is None
+                or unit.lower() != (current.saldo_palet_unit or "").lower()
+            ):
+                taken = await self.repo.get_by_saldo_palet_unit(unit)
+                if taken is not None and (
+                    current is None or taken.uuid != current.uuid
+                ):
+                    raise ObjectAlreadyExistsException(
+                        f"Jednostka „{unit}” z Salda Palet jest już przypisana"
+                        f" do „{taken.name}”"
+                    )
         if "transplaner_name" in data:
             name = (data["transplaner_name"] or "").strip() or None
             data["transplaner_name"] = name

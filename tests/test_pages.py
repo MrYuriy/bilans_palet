@@ -11,7 +11,7 @@ PAGES = [
     ("/app/bilans", "Bilans dzienny"),
     ("/app/ruchy", "Rejestr operacji"),
     ("/app/nowa-operacja", "Nowa operacja"),
-    ("/app/import", "Import z Transplanera"),
+    ("/app/import", "Importy"),
     ("/app/inwentaryzacja", "Inwentaryzacja"),
     ("/app/ustawienia", "Ustawienia"),
     ("/app/audyt", "Audyt"),

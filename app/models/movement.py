@@ -30,6 +30,8 @@ class MovementType(StrEnum):
     STORE_RETURN = "STORE_RETURN"  # Zwroty ze sklepów: +
     UKR_SHIPMENT = "UKR_SHIPMENT"  # Wysyłka UKR: -
     UKR_RETURN = "UKR_RETURN"  # Zwroty z UKR: +
+    # Booked from Saldo Palet each morning: IN - OUT - corrections, per type.
+    SALDO_RECEIPT = "SALDO_RECEIPT"  # Przyjęcia (Saldo Palet): +/-
     CORRECTION = "CORRECTION"  # Korekta stanu: + or -
     RECLASSIFICATION = "RECLASSIFICATION"  # Przeksięgowanie: - from, + to
     INVENTORY = "INVENTORY"  # Inwentaryzacja: counted - system, with the count sheet
