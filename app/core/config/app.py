@@ -30,7 +30,7 @@ class AppConfig(BaseConfig):
     # Reminder mails (SMTP). Empty host = no mail is sent.
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
-    SMTP_USERNAME: str = ""
+    SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
     SMTP_STARTTLS: bool = True

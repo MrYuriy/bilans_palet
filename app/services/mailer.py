@@ -50,8 +50,8 @@ def configured_mailer() -> Mailer | None:
     return Mailer(
         app.SMTP_HOST,
         app.SMTP_PORT,
-        app.SMTP_USERNAME,
+        app.SMTP_USER,
         app.SMTP_PASSWORD,
-        app.SMTP_FROM or app.SMTP_USERNAME,
+        app.SMTP_FROM or app.SMTP_USER,
         app.SMTP_STARTTLS,
     )
