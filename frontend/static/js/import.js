@@ -92,22 +92,44 @@ async function loadHistory() {
     : `<tbody><tr><td class="empty">Jeszcze nic nie wgrano</td></tr></tbody>`;
 }
 
+// A Saldo Palet day split as the stock sees it: IN adds, OUT takes away, a
+// correction counts the other way round (so the parts add up to the day's net).
+const SALDO_PARTS = [
+  ["in", "Przyjęto od dostawców (IN)", (v) => v.in || 0],
+  ["out", "Zwrócono do dostawców (OUT)", (v) => -(v.out || 0)],
+  ["corrections", "Korekty", (v) => -(v.corrections || 0)],
+  ["change", "Zmiana stanu", (v) => v.change || 0],
+];
+
+// One cell: the value per carrier type; the type is named only when the day
+// moved more than one.
+function saldoCell(types, value) {
+  const active = types.filter(([, v]) => v.in || v.out || v.corrections || v.change);
+  const shown = active.filter(([, v]) => value(v));
+  if (!shown.length) return '<span class="mut">0</span>';
+  return shown
+    .map(([name, v]) => (active.length > 1 ? `${esc(name)} ` : "") + signed(value(v)))
+    .join("<br>");
+}
+
 async function loadSaldoHistory() {
   const rows = await api("/imports/saldo-palet", { query: { limit: 10 } });
   $("saldo-history").innerHTML = rows.length
-    ? `<thead><tr><th>Pobrano</th><th>Dzień</th><th>Transakcje</th><th>Zmiany stanu</th><th>Kto</th></tr></thead>
+    ? `<thead><tr><th>Pobrano</th><th>Dzień</th><th class="num">Transakcje</th>
+         ${SALDO_PARTS.map(([, label]) => `<th class="num">${label}</th>`).join("")}
+         <th>Kto</th></tr></thead>
        <tbody>${rows
          .map((r) => {
            const s = r.summary || { types: {} };
-           const changes = Object.entries(s.types || {})
-             .filter(([, v]) => v.change)
-             .map(([name, v]) => `${esc(name)} ${signed(v.change)}`)
-             .join(", ");
+           const types = Object.entries(s.types || {});
            return `<tr>
              <td class="mut">${fmtDateTime(r.created_at)}</td>
              <td>${fmtDate(s.day)}</td>
              <td class="num">${fmt(s.transactions || 0)}</td>
-             <td>${changes || '<span class="mut">0</span>'}</td>
+             ${SALDO_PARTS.map(
+               ([key, , value]) =>
+                 `<td class="num${key === "change" ? " strong" : ""}">${saldoCell(types, value)}</td>`
+             ).join("")}
              <td class="mut">${esc(r.user.username)}</td>
            </tr>`;
          })
@@ -176,10 +198,18 @@ async function check() {
         query: { day: $("saldo-day").value },
       });
       const changes = Object.entries(result.summary.types).filter(([, v]) => v.change);
+      const plain = (n) => `${n > 0 ? "+" : ""}${fmt(n)}`;
       setMsg(
         $("saldo-msg"),
         changes.length
-          ? "Zaksięgowano: " + changes.map(([n, v]) => `${n} ${v.change > 0 ? "+" : ""}${fmt(v.change)}`).join(", ")
+          ? "Zaksięgowano: " +
+              changes
+                .map(
+                  ([n, v]) =>
+                    `${n} ${plain(v.change)} (IN ${plain(v.in || 0)}, OUT ${plain(-(v.out || 0))}, ` +
+                    `korekty ${plain(-(v.corrections || 0))})`
+                )
+                .join("; ")
           : "Pobrano — bez zmian stanu",
         "success"
       );
