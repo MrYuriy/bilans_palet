@@ -409,3 +409,6 @@ dialog.detail:not([open]) { display: none; }
     color: var(--muted);
 }
 .chart-tip strong { color: var(--ink); font-size: 13px; }
+
+/* A long comment in a table: one line, the rest in the tooltip. */
+td.note { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

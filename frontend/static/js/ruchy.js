@@ -42,7 +42,7 @@ async function load() {
 
   table.innerHTML = page.data.length
     ? `<thead><tr><th>Data</th><th>Operacja</th><th>Pozycje</th>
-         <th>Nr dokumentu</th><th>Użytkownik</th><th>Wprowadzono</th></tr></thead>
+         <th>Nr dokumentu</th><th>Komentarz</th><th>Użytkownik</th><th>Wprowadzono</th></tr></thead>
        <tbody>${page.data
          .map(
            (m) => `<tr class="click" data-uuid="${m.uuid}">
@@ -50,6 +50,7 @@ async function load() {
              <td class="strong">${esc(m.type_label)}</td>
              <td>${linesSummary(m)}</td>
              <td>${esc(m.document_number || "")}</td>
+             <td class="note" title="${esc(m.comment || "")}">${esc(m.comment || "")}</td>
              <td class="mut">${esc(m.user.username)}</td>
              <td class="mut">${fmtDateTime(m.created_at)}</td>
            </tr>`
