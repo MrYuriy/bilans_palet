@@ -14,7 +14,10 @@ function hint(op) {
   if (op.code === "RECLASSIFICATION") return "Ilość przechodzi z jednego typu nośnika na inny.";
   if (op.code === "CORRECTION") return "Ilość ze znakiem: dodatnia zwiększa, ujemna zmniejsza stan.";
   const sign = op.sign > 0 ? "zwiększa stan" : "zmniejsza stan";
-  return op.counted_types_only ? `Ilość ${sign}. Tylko typy liczone w raportach.` : `Ilość ${sign}.`;
+  const parts = [`Ilość ${sign}.`];
+  if (op.counted_types_only) parts.push("Tylko typy liczone w raportach.");
+  if (op.max_line_quantity) parts.push(`Maks. ${fmt(op.max_line_quantity)} szt. w jednym wpisie.`);
+  return parts.join(" ");
 }
 
 // <option>s grouped by carrier group; ``except`` leaves one type out.
@@ -48,7 +51,9 @@ function lineRow() {
   tr.innerHTML = `
     <td><select class="l-type">${typeOptions(allowedTypes())}</select></td>
     ${reclass ? '<td><select class="l-to"></select></td>' : ""}
-    <td class="num"><input class="num-in l-qty" type="number" step="1"></td>
+    <td class="num"><input class="num-in l-qty" type="number" step="1"${
+      state.type.max_line_quantity ? ` min="1" max="${state.type.max_line_quantity}"` : ""
+    }></td>
     <td class="mut l-stock"></td>
     <td><button type="button" class="sm danger l-remove" title="Usuń pozycję">Usuń</button></td>`;
 
@@ -114,6 +119,8 @@ function selectType(op) {
   $("lines-hint").textContent = hint(op);
   $("comment-label").textContent = op.note_required ? "Notatka (wymagana)" : "Notatka";
   $("comment").placeholder = op.note_required ? "np. powód, odbiorca, nr zlecenia" : "opcjonalnie";
+  $("document-label").textContent = op.document_required ? "Nr dokumentu (wymagany)" : "Nr dokumentu";
+  $("document").placeholder = op.document_required ? "np. WZ, PZ, nr zlecenia" : "opcjonalnie";
   resetLines();
 }
 
@@ -137,6 +144,16 @@ async function save(e) {
   const lines = collectLines();
   if (lines.some((l) => Number.isNaN(l.quantity))) {
     setMsg(msg, "Podaj ilość w każdej pozycji");
+    return;
+  }
+  const limit = state.type.max_line_quantity;
+  if (limit && lines.some((l) => l.quantity > limit)) {
+    setMsg(msg, `Maksymalnie ${fmt(limit)} szt. w jednym wpisie`);
+    return;
+  }
+  if (state.type.document_required && !$("document").value.trim()) {
+    setMsg(msg, "Podaj numer dokumentu");
+    $("document").focus();
     return;
   }
   $("save").disabled = true;

@@ -67,13 +67,16 @@ class MovementService:
         self.lock = StockLock(session)
         self.permissions = PermissionService()
 
-    def types(self, user: User) -> list[MovementTypeOut]:
+    async def types(self, user: User) -> list[MovementTypeOut]:
+        limit = await SettingsService(self.session).max_line_quantity()
         return [
             MovementTypeOut(
                 code=op.type,
                 label=op.label,
                 sign=op.sign,
                 note_required=op.note_required,
+                document_required=op.document_required,
+                max_line_quantity=limit if op.limited else None,
                 counted_types_only=op.counted_types_only,
                 can_enter=op.type != MovementType.INVENTORY
                 and not op.imported
@@ -137,6 +140,11 @@ class MovementService:
     ) -> list[MovementLine]:
         if not lines:
             raise BadRequestException("Dodaj co najmniej jedną pozycję")
+        limit = (
+            await SettingsService(self.session).max_line_quantity()
+            if operation.limited
+            else None
+        )
 
         reclassification = operation.type == MovementType.RECLASSIFICATION
         types = await self.carrier_types(
@@ -175,6 +183,11 @@ class MovementService:
 
             if line.quantity <= 0:
                 raise BadRequestException("Ilość musi być większa od zera")
+            if limit is not None and line.quantity > limit:
+                raise BadRequestException(
+                    f"Maksymalnie {limit} szt. w jednym wpisie"
+                    f" („{carrier_type.name}”: {line.quantity})"
+                )
 
             if not reclassification:
                 add(carrier_type.uuid, operation.sign * line.quantity)
@@ -204,6 +217,9 @@ class MovementService:
         comment = clean_text(data.comment)
         if operation.note_required and comment is None:
             raise BadRequestException(f"„{operation.label}” wymaga notatki")
+        document_number = clean_text(data.document_number)
+        if operation.document_required and document_number is None:
+            raise BadRequestException("Podaj numer dokumentu")
 
         lines = await self._lines(operation, data.lines)
 
@@ -216,7 +232,7 @@ class MovementService:
             type=operation.type,
             user_uuid=user.uuid,
             operation_date=operation_date,
-            document_number=clean_text(data.document_number),
+            document_number=document_number,
             comment=comment,
             lines=lines,
         )

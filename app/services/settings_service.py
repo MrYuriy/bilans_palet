@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.timeutils import business_date, local_now
 from app.models.day_closure import DayClosure
-from app.models.setting import DEFAULT_DAY_CUTOFF, SystemSettings
+from app.models.setting import (
+    DEFAULT_DAY_CUTOFF,
+    DEFAULT_MAX_LINE_QUANTITY,
+    SystemSettings,
+)
 from app.models.user import User
 from app.services.audit_service import AuditService
 
@@ -20,6 +24,21 @@ def _hhmm(value: time) -> str:
     return value.strftime("%H:%M")
 
 
+def _defaults() -> SystemSettings:
+    return SystemSettings(
+        id=1,
+        day_cutoff=DEFAULT_DAY_CUTOFF,
+        max_line_quantity=DEFAULT_MAX_LINE_QUANTITY,
+    )
+
+
+def _view(row: SystemSettings) -> dict:
+    return {
+        "day_cutoff": _hhmm(row.day_cutoff),
+        "max_line_quantity": row.max_line_quantity,
+    }
+
+
 class SettingsService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -28,10 +47,13 @@ class SettingsService:
     async def get(self) -> SystemSettings:
         """The settings row, or the defaults while the admin has not saved any."""
         row = await self.session.get(SystemSettings, 1)
-        return row or SystemSettings(id=1, day_cutoff=DEFAULT_DAY_CUTOFF)
+        return row or _defaults()
 
     async def day_cutoff(self) -> time:
         return (await self.get()).day_cutoff
+
+    async def max_line_quantity(self) -> int:
+        return (await self.get()).max_line_quantity
 
     async def last_closed_day(self) -> date | None:
         return (
@@ -50,22 +72,26 @@ class SettingsService:
             return last_closed + timedelta(days=1)
         return day
 
-    async def update(self, actor: User, day_cutoff: time) -> SystemSettings:
+    async def update(
+        self,
+        actor: User,
+        day_cutoff: time | None = None,
+        max_line_quantity: int | None = None,
+    ) -> SystemSettings:
+        """Change what is given; the audit keeps only what changed."""
         row = await self.session.get(SystemSettings, 1)
         if row is None:
-            row = SystemSettings(id=1, day_cutoff=DEFAULT_DAY_CUTOFF)
+            row = _defaults()
             self.session.add(row)
 
-        before = {"day_cutoff": _hhmm(row.day_cutoff)}
-        row.day_cutoff = day_cutoff.replace(second=0, microsecond=0)
+        before = _view(row)
+        if day_cutoff is not None:
+            row.day_cutoff = day_cutoff.replace(second=0, microsecond=0)
+        if max_line_quantity is not None:
+            row.max_line_quantity = max_line_quantity
         await self.session.flush()
 
         await self.audit.log_update(
-            actor,
-            "settings",
-            SETTINGS_ENTITY_UUID,
-            "Ustawienia",
-            before,
-            {"day_cutoff": _hhmm(row.day_cutoff)},
+            actor, "settings", SETTINGS_ENTITY_UUID, "Ustawienia", before, _view(row)
         )
         return row

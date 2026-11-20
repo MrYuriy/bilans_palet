@@ -19,7 +19,7 @@ async def history(client, admin_headers, carriers):
     for kind, ln, doc in [
         ("PRODUCER_RECEIPT", line(carriers.euro, 100), "PZ/1"),
         ("ECOM_TRANSFER", line(carriers.euro, 30), "WZ/1"),
-        ("OTHER_RECEIPT", line(carriers.single, 7), None),
+        ("OTHER_RECEIPT", line(carriers.single, 7), "PZ/2"),
     ]:
         response = await move(
             client, admin_headers, kind, ln, day=YESTERDAY, document_number=doc

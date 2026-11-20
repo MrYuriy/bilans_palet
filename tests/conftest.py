@@ -248,8 +248,16 @@ async def move(
     comment: str | None = "test",
     **fields,
 ):
-    """POST a movement; returns the response (not checked)."""
-    payload = {"type": kind, "comment": comment, "lines": list(lines), **fields}
+    """POST a movement; returns the response (not checked). Every operation
+    entered by hand asks for a document number; pass document_number=None to
+    leave it out."""
+    payload = {
+        "type": kind,
+        "comment": comment,
+        "document_number": "DOK/1",
+        "lines": list(lines),
+        **fields,
+    }
     if day is not None:
         payload["operation_date"] = day.isoformat()
     return await client.post("/movements", headers=headers, json=payload)

@@ -1,6 +1,6 @@
 from datetime import date, time
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SettingsOut(BaseModel):
@@ -10,7 +10,12 @@ class SettingsOut(BaseModel):
     current_day: date
     # The latest closed warehouse day (the D-1 report), None before the first.
     last_closed_day: date | None = None
+    # Most one line of a limited operation may carry.
+    max_line_quantity: int
 
 
 class SettingsUpdate(BaseModel):
-    day_cutoff: time
+    """Only what is given changes."""
+
+    day_cutoff: time | None = None
+    max_line_quantity: int | None = Field(default=None, ge=1, le=1_000_000)

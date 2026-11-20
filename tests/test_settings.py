@@ -33,6 +33,7 @@ async def test_default_cutoff_is_midnight(client, admin_headers):
         "day_cutoff": "00:00",
         "current_day": warehouse_today().isoformat(),
         "last_closed_day": None,
+        "max_line_quantity": 700,
     }
 
 
@@ -84,3 +85,34 @@ async def test_others_read_but_do_not_change(client, session, role):
 
     assert read.status_code == 200
     assert change.status_code == 403
+
+
+# ---------- the line limit ----------
+
+
+async def test_admin_changes_the_line_limit_alone(client, admin_headers):
+    await client.put("/settings", headers=admin_headers, json={"day_cutoff": "05:00"})
+
+    response = await client.put(
+        "/settings", headers=admin_headers, json={"max_line_quantity": 500}
+    )
+    update, _cutoff = (await client.get("/audit", headers=admin_headers)).json()
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["max_line_quantity"], response.json()["day_cutoff"]) == (
+        500,
+        "05:00",
+    )
+    assert (update["old_data"], update["new_data"]) == (
+        {"max_line_quantity": 700},
+        {"max_line_quantity": 500},
+    )
+
+
+@pytest.mark.parametrize("value", [0, -5])
+async def test_the_line_limit_is_positive(client, admin_headers, value):
+    response = await client.put(
+        "/settings", headers=admin_headers, json={"max_line_quantity": value}
+    )
+
+    assert response.status_code == 422

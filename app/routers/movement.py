@@ -20,7 +20,7 @@ router = APIRouter(prefix="/movements", tags=["Movements"])
 
 @router.get("/types", response_model=list[MovementTypeOut])
 async def list_movement_types(session: SessionDep, current_user: CurrentUserDep):
-    return MovementService(session).types(current_user)
+    return await MovementService(session).types(current_user)
 
 
 @router.post("", response_model=MovementOut)

@@ -25,6 +25,7 @@ const FIELD_LABELS = {
   areas: "Obszary", // older entries
   password_changed: "Hasło",
   day_cutoff: "Godzina zamknięcia doby",
+  max_line_quantity: "Maks. ilość w jednym wpisie",
 };
 
 function value(field, v) {

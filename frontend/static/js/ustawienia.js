@@ -31,6 +31,9 @@ function showTab(tab) {
   if (tab === "day") {
     document.querySelector('[data-panel="day"]').classList.remove("hidden");
     loadDay();
+  } else if (tab === "limits") {
+    document.querySelector('[data-panel="limits"]').classList.remove("hidden");
+    loadLimits();
   } else if (tab === "users") {
     document.querySelector('[data-panel="users"]').classList.remove("hidden");
     loadUsers();
@@ -64,6 +67,28 @@ $("day-form").addEventListener("submit", async (e) => {
     await loadDay();
   } catch (err) {
     setMsg($("day-msg"), err.message);
+  }
+});
+
+// ---------- limits of the operations ----------
+
+async function loadLimits() {
+  $("max-line").value = (await api("/settings")).max_line_quantity;
+}
+
+$("limits-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const value = parseInt($("max-line").value, 10);
+  if (!(value >= 1)) {
+    setMsg($("limits-msg"), "Podaj liczbę większą od zera");
+    return;
+  }
+  try {
+    await api("/settings", { method: "PUT", body: { max_line_quantity: value } });
+    setMsg($("limits-msg"), "Zapisano", "success");
+    await loadLimits();
+  } catch (err) {
+    setMsg($("limits-msg"), err.message);
   }
 });
 

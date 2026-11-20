@@ -7,6 +7,7 @@
 {% block content %}
 <div class="tabs" id="tabs">
     <button class="chip hidden" data-tab="day" data-module="settings">Doba robocza</button>
+    <button class="chip hidden" data-tab="limits" data-module="settings">Limity operacji</button>
     <button class="chip hidden" data-tab="holidays" data-module="settings">Dni wolne</button>
     <button class="chip hidden" data-tab="reminders" data-module="settings">Powiadomienia</button>
     <button class="chip hidden" data-tab="carrier-groups" data-module="masterdata">Grupy nośników</button>
@@ -30,6 +31,24 @@
         </div>
         <div class="mut" id="day-info"></div>
         <div class="msg" id="day-msg"></div>
+    </form>
+</section>
+
+<!-- Limits of the operations -->
+<section class="card hidden" data-panel="limits">
+    <div class="hd"><h2>Limity operacji</h2></div>
+    <form class="pad col" id="limits-form">
+        <p class="mut" style="margin:0;max-width:70ch">
+            Najwięcej sztuk jednego typu nośnika w jednym wpisie operacji:
+            Wysyłka do producentów EURO, Przesunięcie na ECOM, Inne — przyjęcie,
+            Inne — wydanie. Większą ilość trzeba wprowadzić kilkoma wpisami.
+        </p>
+        <div class="row" style="align-items:flex-end">
+            <div class="fld"><label for="max-line">Maks. ilość w jednym wpisie</label>
+                <input type="number" id="max-line" min="1" step="1" required></div>
+            <button class="pri" type="submit">Zapisz</button>
+        </div>
+        <div class="msg" id="limits-msg"></div>
     </form>
 </section>
 

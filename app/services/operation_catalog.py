@@ -25,6 +25,11 @@ class Operation:
     # +1 adds to the stock, -1 takes from it; 0: special (the lines carry the sign).
     sign: int = 0
     note_required: bool = False
+    # Entered by hand with the number of its document (WZ, PZ, ...).
+    document_required: bool = False
+    # One line carries at most the limit from the settings (700 by default);
+    # more is taken for a typo.
+    limited: bool = False
     # Only carrier types counted in reports, e.g. new EURO from a producer.
     counted_types_only: bool = False
     # Booked by an import (a file, another app), never entered by hand; the
@@ -47,6 +52,7 @@ OPERATIONS: dict[MovementType, Operation] = {
             RECEIPTS,
             sign=1,
             counted_types_only=True,
+            document_required=True,
         ),
         Operation(
             MovementType.PRODUCER_SHIPMENT,
@@ -54,6 +60,8 @@ OPERATIONS: dict[MovementType, Operation] = {
             OPERATIONS_MODULE,
             SHIPMENTS,
             sign=-1,
+            document_required=True,
+            limited=True,
         ),
         Operation(
             MovementType.ECOM_TRANSFER,
@@ -61,6 +69,8 @@ OPERATIONS: dict[MovementType, Operation] = {
             OPERATIONS_MODULE,
             SHIPMENTS,
             sign=-1,
+            document_required=True,
+            limited=True,
         ),
         Operation(
             MovementType.OTHER_RECEIPT,
@@ -69,6 +79,8 @@ OPERATIONS: dict[MovementType, Operation] = {
             RECEIPTS,
             sign=1,
             note_required=True,
+            document_required=True,
+            limited=True,
         ),
         Operation(
             MovementType.OTHER_SHIPMENT,
@@ -77,6 +89,8 @@ OPERATIONS: dict[MovementType, Operation] = {
             SHIPMENTS,
             sign=-1,
             note_required=True,
+            document_required=True,
+            limited=True,
         ),
         # From the Transplaner file. UKR is kept apart from the stores.
         Operation(
@@ -128,6 +142,7 @@ OPERATIONS: dict[MovementType, Operation] = {
             OPERATIONS_MODULE,
             CORRECTIONS,
             note_required=True,
+            document_required=True,
         ),
         # Off one carrier type, onto another.
         Operation(
@@ -136,6 +151,7 @@ OPERATIONS: dict[MovementType, Operation] = {
             RECLASSIFICATION_MODULE,
             RECLASSIFICATIONS,
             note_required=True,
+            document_required=True,
         ),
         # Entered with the count sheet (InventoryService), not as a movement.
         Operation(
@@ -149,3 +165,9 @@ OPERATIONS: dict[MovementType, Operation] = {
 
 # Every movement type needs its entry above.
 assert set(OPERATIONS) == set(MovementType)
+# Every operation entered by hand asks for its document.
+assert all(
+    op.document_required
+    for op in OPERATIONS.values()
+    if not op.imported and op.type != MovementType.INVENTORY
+)

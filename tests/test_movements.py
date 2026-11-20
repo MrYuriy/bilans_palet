@@ -341,3 +341,107 @@ async def test_a_saved_movement_cannot_be_edited_or_deleted(
 
     assert (await client.put(url, headers=admin_headers, json={})).status_code == 405
     assert (await client.delete(url, headers=admin_headers)).status_code == 405
+
+
+# ---------- the document and the line limit ----------
+
+MANUAL = [
+    ("PRODUCER_RECEIPT", 5),
+    ("PRODUCER_SHIPMENT", 5),
+    ("ECOM_TRANSFER", 5),
+    ("OTHER_RECEIPT", 5),
+    ("OTHER_SHIPMENT", 5),
+    ("CORRECTION", -5),
+]
+
+
+@pytest.mark.parametrize(("kind", "quantity"), MANUAL)
+@pytest.mark.parametrize("document", [None, "", "   "])
+async def test_every_operation_by_hand_needs_a_document(
+    client, admin_headers, carriers, kind, quantity, document
+):
+    response = await move(
+        client,
+        admin_headers,
+        kind,
+        line(carriers.euro, quantity),
+        document_number=document,
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "Podaj numer dokumentu"}
+
+
+async def test_a_reclassification_needs_a_document(client, admin_headers, carriers):
+    response = await move(
+        client,
+        admin_headers,
+        "RECLASSIFICATION",
+        line(carriers.euro, 5, to=carriers.damaged),
+        document_number=None,
+    )
+
+    assert response.json() == {"message": "Podaj numer dokumentu"}
+
+
+LIMITED = ["PRODUCER_SHIPMENT", "ECOM_TRANSFER", "OTHER_RECEIPT", "OTHER_SHIPMENT"]
+
+
+@pytest.mark.parametrize("kind", LIMITED)
+async def test_a_line_carries_at_most_700(client, admin_headers, carriers, kind):
+    at_limit = await move(client, admin_headers, kind, line(carriers.euro, 700))
+    over = await move(client, admin_headers, kind, line(carriers.euro, 701))
+
+    assert at_limit.status_code == 200, at_limit.text
+    assert over.status_code == 400
+    assert over.json() == {
+        "message": "Maksymalnie 700 szt. w jednym wpisie („EURO”: 701)"
+    }
+
+
+async def test_the_limit_is_per_line(client, admin_headers, carriers):
+    response = await move(
+        client,
+        admin_headers,
+        "ECOM_TRANSFER",
+        line(carriers.euro, 500),
+        line(carriers.single, 300),
+    )
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize(
+    ("kind", "ln"),
+    [
+        ("PRODUCER_RECEIPT", lambda c: line(c.euro, 1500)),
+        ("CORRECTION", lambda c: line(c.euro, -1500)),
+        ("RECLASSIFICATION", lambda c: line(c.euro, 1500, to=c.damaged)),
+    ],
+)
+async def test_other_operations_have_no_limit(
+    client, admin_headers, carriers, kind, ln
+):
+    response = await move(client, admin_headers, kind, ln(carriers))
+
+    assert response.status_code == 200, response.text
+
+
+async def test_the_admin_sets_the_limit(client, admin_headers, carriers):
+    await client.put("/settings", headers=admin_headers, json={"max_line_quantity": 50})
+
+    response = await move(
+        client, admin_headers, "ECOM_TRANSFER", line(carriers.euro, 51)
+    )
+    types = {
+        t["code"]: t
+        for t in (await client.get("/movements/types", headers=admin_headers)).json()
+    }
+
+    assert response.json()["message"].startswith("Maksymalnie 50 szt.")
+    assert types["ECOM_TRANSFER"]["max_line_quantity"] == 50
+    assert types["PRODUCER_RECEIPT"]["max_line_quantity"] is None
+    assert all(
+        types[kind]["document_required"]
+        for kind, _ in [*MANUAL, ("RECLASSIFICATION", 0)]
+    )

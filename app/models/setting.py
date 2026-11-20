@@ -5,6 +5,8 @@ from sqlalchemy import CheckConstraint, Column, Integer, Time, text
 from app.models.base import BaseModel, TimestampMixin
 
 DEFAULT_DAY_CUTOFF = time(0, 0)
+# Most a line of the limited operations may carry (see operation_catalog).
+DEFAULT_MAX_LINE_QUANTITY = 700
 
 
 class SystemSettings(BaseModel, TimestampMixin):
@@ -20,6 +22,16 @@ class SystemSettings(BaseModel, TimestampMixin):
     # with 06:00 a movement at 03:00 would belong to the previous day.
     day_cutoff = Column(
         Time, nullable=False, default=DEFAULT_DAY_CUTOFF, server_default=text("'00:00'")
+    )
+
+    # One entry of a limited operation (to producers, to ECOM, other receipt or
+    # shipment) carries at most this many of a carrier type; more is a typo.
+    max_line_quantity = Column(
+        Integer,
+        CheckConstraint("max_line_quantity > 0", name="ck_system_settings_max_line"),
+        nullable=False,
+        default=DEFAULT_MAX_LINE_QUANTITY,
+        server_default=text(str(DEFAULT_MAX_LINE_QUANTITY)),
     )
 
     def __repr__(self):

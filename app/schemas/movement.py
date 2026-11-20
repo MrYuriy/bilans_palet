@@ -16,6 +16,9 @@ class MovementTypeOut(BaseModel):
     # special (re-classification, inventory).
     sign: int
     note_required: bool
+    document_required: bool
+    # Most one line may carry; None: no limit.
+    max_line_quantity: int | None = None
     counted_types_only: bool
     # May the current user enter it here (inventory goes through its own screen).
     can_enter: bool

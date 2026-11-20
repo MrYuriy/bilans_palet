@@ -14,6 +14,7 @@ async def _out(service: SettingsService) -> SettingsOut:
         day_cutoff=(await service.day_cutoff()).strftime("%H:%M"),
         current_day=await service.current_day(),
         last_closed_day=await service.last_closed_day(),
+        max_line_quantity=await service.max_line_quantity(),
     )
 
 
@@ -27,6 +28,6 @@ async def update_settings(
     payload: SettingsUpdate, session: SessionDep, admin: SettingsAdmin
 ):
     service = SettingsService(session)
-    await service.update(admin, payload.day_cutoff)
+    await service.update(admin, payload.day_cutoff, payload.max_line_quantity)
     await session.commit()
     return await _out(service)
